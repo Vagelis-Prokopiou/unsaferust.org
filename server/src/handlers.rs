@@ -1,0 +1,286 @@
+use std::sync::{Arc, Mutex};
+use futures::future;
+use tokio;
+use crate::models::pagination::PaginationOptions;
+use actix_web::web::{Data};
+use actix_web::{web, HttpResponse, Responder};
+use sqlx::{PgPool, Row};
+use crate::models::project::{Project, ProjectStats, ProjectStatsDTO, ProjectWithUrl};
+use crate::models::provider::Provider;
+use anyhow::{Context};
+
+pub async fn health_check() -> impl Responder { HttpResponse::Ok() }
+
+pub async fn index() -> impl Responder {
+    return HttpResponse::build(actix_web::http::StatusCode::PERMANENT_REDIRECT)
+        .append_header(("Location", "api/v1/projects"))
+        .finish();
+}
+
+pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
+    let projects: Vec<ProjectWithUrl> = sqlx::query_as("
+            select
+            projects.*
+            , providers.url
+            from projects
+            inner join providers on providers.id = projects.provider_id
+         ")
+        .fetch_all(db.as_ref())
+        .await
+        .with_context(|| "Failed to get projects from db".to_string())
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    // Prepare a variable to store the updated projects.
+    let updated_projects: Arc<Mutex<Vec<ProjectStats>>> = Arc::new(Mutex::new(Vec::with_capacity(projects.len())));
+
+    // Create the async tasks.
+    let update_project_tasks: Vec<_> = projects
+        .into_iter()
+        .map(|project| {
+            let updated_projects = updated_projects.clone();
+            tokio::spawn(async move {
+                let project_dir = &project.name;
+                let project_url = format!("{}/{}/{}.git", project.url, project.namespace, project.name);
+                let command = format!(
+                    r#"
+                    mkdir -p /tmp/rust_projects > /dev/null 2>&1;
+                    cd /tmp/rust_projects;
+                    if [ -d ./{project_dir} ]
+                    then
+                        cd ./{project_dir};
+                        git pull > /dev/null 2>&1;
+                        cd ..;
+                    else
+                        git clone {project_url};
+                    fi
+                    unsafe_lines=$(grep -r unsafe ./{project_dir} | grep '.*.rs' | grep -v '//' | grep -v 'forbid(unsafe_code)' | wc -l);
+
+                    cd ./{project_dir};
+                    code_lines=$(cloc . | grep Rust | awk '{{print $5}}');
+                    echo "$unsafe_lines:$code_lines";
+                    "#
+                );
+                let command_output = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(command)
+                    .output()
+                    .expect("Failed to execute std::process::Command");
+                let command_output_string: String = String::from_utf8_lossy(&command_output.stdout).replace('\n', "");
+                let data: Vec<i32> = command_output_string.split(':')
+                    .map(|v| match v.parse() {
+                        Ok(v) => v,
+                        Err(_) => {
+                            println!("Failed to parse v {v} to i32 for {project_dir}");
+                            0
+                        }
+                    })
+                    .collect();
+                assert_eq!(data.len(), 2, "The shell command did not resolve to 2 values (unsafe_lines:code_lines)");
+                let unsafe_lines = data[0];
+                let code_lines = data[1];
+
+                println!();
+                println!("project: {}", &project.name);
+                println!("unsafe_lines: {}", unsafe_lines);
+                println!("lines_of_code: {}", code_lines);
+                println!();
+
+                updated_projects
+                    .lock()
+                    .unwrap()
+                    .push(ProjectStats::new(
+                        project.id,
+                        code_lines,
+                        unsafe_lines,
+                        "".to_owned(),
+                        "".to_owned())
+                    );
+            })
+        })
+        .collect();
+    future::join_all(update_project_tasks).await;
+
+    // Update the db.
+    for updated_project in updated_projects.lock().unwrap().iter() {
+        let project_id = updated_project.project_id;
+        let code_lines = updated_project.code_lines;
+        let unsafe_lines = updated_project.unsafe_lines;
+        let query = format!("
+            DO
+            $do$
+                BEGIN
+                    if exists(
+                                select project_id
+                                from project_stats
+                                where project_id = {project_id}
+                                and unsafe_lines = {unsafe_lines}
+                              )
+                    then
+                        update project_stats
+                        set updated_at = current_date,
+                        code_lines = {code_lines}
+                        where project_id = {project_id}
+                        and unsafe_lines = {unsafe_lines};
+                    else
+                        insert into project_stats (project_id, code_lines, unsafe_lines)
+                        VALUES ({project_id}, {code_lines}, {unsafe_lines});
+                    end if;
+                END
+            $do$");
+        match sqlx::query(&query)
+            .execute(db.as_ref())
+            .await {
+            Ok(_) => {}
+            Err(_) => { println!("/project-stats/update failed for project_id {project_id}") }
+        }
+    }
+    return Ok(HttpResponse::Ok());
+}
+
+pub async fn project_stats_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+    // Here we return all the entries for this specific project.
+    let project_stats: Vec<ProjectStats> = sqlx::query_as(
+        "
+        select
+        project_id
+        ,code_lines
+        ,unsafe_lines
+        ,COALESCE(cast(created_at as text), '') as created_at
+        ,COALESCE(cast(updated_at as text), '') as updated_at
+        from project_stats
+        where project_id = $1
+        order by created_at desc"
+    )
+        .bind(*id)
+        .fetch_all(db.as_ref())
+        .await
+        .expect("Failed to fetch projects");
+    return web::Json(project_stats);
+}
+
+#[derive(serde::Deserialize)]
+pub struct ProjectStatsNameFilter {
+    name: Option<String>,
+}
+
+pub async fn project_stats_get_all(
+    db: Data<PgPool>,
+    pagination_options: web::Query<PaginationOptions>,
+    name_filter: web::Query<ProjectStatsNameFilter>,
+) -> impl Responder {
+    let limit = pagination_options.limit.unwrap_or(50);
+    let project_id = pagination_options.project_id.unwrap_or(0);
+    let direction = match &pagination_options.direction {
+        Some(v) => { if v.to_lowercase() == "desc" { "<" } else { ">" } }
+        None => ">"
+    };
+    let name = (name_filter.name.as_ref().unwrap_or(&"".to_owned())).clone();
+    let query = format!("
+        select
+            t.project_id
+            ,t.name
+            ,t.url
+            ,t.code_lines
+            ,t.unsafe_lines
+            ,t.created_at
+            ,t.updated_at
+            ,COUNT(project_id) OVER () as total
+         from (
+            select
+            RANK() OVER (partition by ps.project_id ORDER BY ps.created_at desc) as rank_order
+            ,ps.project_id
+            ,p.name
+            ,concat(providers.url, '/', p.namespace, '/', p.name) as url
+            ,ps.code_lines
+            ,ps.unsafe_lines
+            ,COALESCE(cast(ps.created_at as text), '') as created_at
+            ,COALESCE(cast(ps.updated_at as text), '') as updated_at
+            from project_stats as ps
+            inner join projects as p on p.id = ps.project_id
+            inner join providers on providers.id = p.provider_id
+            where ps.project_id {direction} {project_id}
+            and p.name like concat('%', $1 , '%')
+            order by ps.created_at desc, p.name
+            limit {limit}
+        ) as t
+        where rank_order = 1");
+    let rows = sqlx::query(query.as_ref())
+        .bind(name)
+        .fetch_all(db.as_ref())
+        .await
+        .expect("");
+    let project_stats: Vec<ProjectStatsDTO> = rows
+        .iter()
+        .map(|row| {
+            return ProjectStatsDTO::new(
+                row.get("project_id"),
+                row.get("name"),
+                row.get("url"),
+                row.get("code_lines"),
+                row.get("unsafe_lines"),
+                row.get("created_at"),
+                row.get("updated_at"),
+            );
+        })
+        .collect();
+    // Todo: Add a type for this response.
+    let total: i64 = if rows.is_empty() { 0 } else { rows[0].get("total") };
+    let result = serde_json::json!({
+        "project_stats": project_stats,
+        "meta": { "total": total }
+    });
+    return web::Json(result);
+}
+
+
+pub async fn providers_get_all(db: web::Data<PgPool>) -> impl Responder {
+    let providers: Vec<Provider> = sqlx::query_as("select * from providers")
+        .fetch_all(db.as_ref())
+        .await
+        .expect("Failed to fetch providers");
+    return web::Json(providers);
+}
+
+pub async fn providers_get_by_id(db: web::Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+    let providers: Vec<Provider> = sqlx::query_as("select * from providers where id = $1")
+        .bind(*id)
+        .fetch_all(db.as_ref())
+        .await
+        .expect("Failed to fetch providers");
+    return web::Json(providers);
+}
+
+pub async fn projects_get_all(db: Data<PgPool>) -> impl Responder {
+    let projects: Vec<Project> = sqlx::query_as("select * from projects")
+        .fetch_all(db.as_ref())
+        .await
+        .expect("Failed to fetch projects");
+    return web::Json(projects);
+}
+
+pub async fn projects_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+    // Here we return all the entries for this specific project.
+    let project_stats: Vec<Project> = sqlx::query_as(
+        // "
+        //                         select projects.id,
+        //                         projects.repo_name                                                           as name,
+        //                         concat(providers.url, '/', projects.repo_namespace, '/', projects.repo_name) as url,
+        //                         COALESCE(ps.unsafe_lines, 0) as unsafe_lines,
+        //                         COALESCE(ps.code_lines, 0) as code_lines,
+        //                         COALESCE(cast(ps.created_at as text), '') as created_at,
+        //                         COALESCE(cast(ps.updated_at as text), '') as updated_at
+        //                         from projects
+        //                         inner join providers on providers.id = projects.provider_id
+        //                         left join project_stats as ps on ps.project_id = projects.id
+        //                         where projects.id = $1
+        //                         order by ps.created_at desc;
+        //                     "
+        "select * from projects where id = $1"
+    )
+        .bind(*id)
+        .fetch_all(db.as_ref())
+        .await
+        .expect("Failed to fetch projects");
+    return web::Json(project_stats);
+}
+
