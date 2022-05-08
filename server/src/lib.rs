@@ -8,6 +8,7 @@ use crate::handlers::*;
 use actix_web::dev::Server;
 use actix_web::web::Data;
 use actix_web::{App, HttpServer, web};
+use actix_web::middleware::DefaultHeaders;
 use sqlx::PgPool;
 
 
@@ -25,7 +26,18 @@ pub fn run(
             .allowed_methods(vec!["GET"])
             .max_age(3600);
 
+
         App::new()
+            .wrap(DefaultHeaders::new().add(("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")))
+            .wrap(DefaultHeaders::new().add(("Content-Security-Policy", "default-src https:")))
+            .wrap(DefaultHeaders::new().add(("X-XSS-Protection", "0")))
+            .wrap(DefaultHeaders::new().add(("X-Frame-Options", "DENY")))
+            .wrap(DefaultHeaders::new().add(("X-Content-Type-Options", "nosniff")))
+            .wrap(DefaultHeaders::new().add(("Referrer-Policy", "strict-origin-when-cross-origin")))
+            .wrap(DefaultHeaders::new().add(("Content-Type", "text/html; charset=UTF-8")))
+            .wrap(DefaultHeaders::new().add(("Access-Control-Allow-Origin", "https://unsaferust.org")))
+            .wrap(DefaultHeaders::new().add(("Cross-Origin-Resource-Policy", "same-site")))
+            .wrap(DefaultHeaders::new().add(("Cross-Origin-Embedder-Policy", "require-corp")))
             .wrap(cors)
             .app_data(db.clone())
             .route("/", web::get().to(index))
