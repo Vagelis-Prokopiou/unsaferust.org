@@ -11,7 +11,7 @@ const Pager: (props) => JSX.Element = (props) => {
                 </span>
                 <div class="inline-flex mt-2 xs:mt-0">
                     <button onclick={() => props.paginate("desc")}
-                            class="inline-flex items-center py-2 px-4 text-sm font-medium text-white bg-gray-800 rounded-l hover:bg-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">
+                            class="inline-flex items-center py-2 px-4 text-sm font-medium hover:bg-gray-100 rounded-l dark:text-gray-400 dark:hover:bg-gray-700">
                         <svg class="mr-2 w-5 h-5" fill="currentColor" viewBox="0 0 20 20"
                              xmlns="http://www.w3.org/2000/svg">
                             <path fill-rule="evenodd"
@@ -21,7 +21,7 @@ const Pager: (props) => JSX.Element = (props) => {
                         Prev
                     </button>
                     <button onclick={() => props.paginate("asc")}
-                            class="inline-flex items-center py-2 px-4 text-sm font-medium text-white bg-gray-800 rounded-r border-0 border-l border-gray-700 hover:bg-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white">
+                            class="inline-flex items-center py-2 px-4 text-sm font-medium hover:bg-gray-100 rborder-gray-500 rounded-r border-l hover:bg-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700">
                         Next
                         <svg class="ml-2 w-5 h-5" fill="currentColor" viewBox="0 0 20 20"
                              xmlns="http://www.w3.org/2000/svg">
