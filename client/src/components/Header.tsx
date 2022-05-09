@@ -4,78 +4,69 @@ import {JSX} from 'solid-js';
 
 const Header: (props) => JSX.Element = (props) => {
     return (
-        <header
-            class="bg-white border-b dark:bg-gray-900 dark:border-gray-700 lg:fixed lg:w-full lg:top-0 lg:left-0 lg:z-30">
-            <div
-                class="container px-4 py-5 mx-auto space-y-4 lg:space-y-0 lg:flex lg:items-center lg:justify-between lg:space-x-10">
+        <nav
+            class="dark:bg-gray-800 p-5">
+            <div class="container flex flex-wrap items-center justify-between mx-auto">
+                <a href="#" class="flex items-center">
+                        <span
+                            class="self-center text-xl font-semibold whitespace-nowrap dark:text-white">unsaferust.org</span>
+                </a>
 
+                {/* Mobile menu button */}
+                <button data-collapse-toggle="mobile-menu" type="button"
+                        class="inline-flex items-center justify-center ml-3 text-gray-400 rounded-lg md:hidden hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-300 dark:text-gray-400 dark:hover:text-white dark:focus:ring-gray-500"
+                        aria-controls="mobile-menu-2" aria-expanded="false">
+                    <span class="sr-only">Open main menu</span>
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd"
+                              d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                              clip-rule="evenodd"></path>
+                    </svg>
+                    <svg class="hidden w-6 h-6" fill="currentColor" viewBox="0 0 20 20"
+                         xmlns="http://www.w3.org/2000/svg">
+                        <path fill-rule="evenodd"
+                              d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                              clip-rule="evenodd">
 
-                <div class="flex justify-between">
-                    <div class="flex items-center">
-                        {/*<svg fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 27"*/}
-                        {/*     class="h-7 w-7 -mt-2 flex-shrink-0">*/}
-                        {/*    <path*/}
-                        {/*        d="M22.487.658s5.03 13.072-1.822 22.171C16.476 28.39 9.84 27.26 5.484 25.68c1.513-3.391 3.441-6.067 5.784-8.03 1.176.623 3.186.792 6.03.51-2.535-.221-4.284-.654-5.246-1.3l.125.08c2.122-1.546 4.556-2.556 7.303-3.029-3.16-.285-6.026.315-8.598 1.804-.577-.742-1.157-1.748-1.74-3.018.07 1.534.339 2.734.809 3.6-2.64 1.797-4.953 4.58-6.94 8.351a7.583 7.583 0 01-.188-.088c-.802-.358-1.328-1.037-1.755-2.036C-1.9 13.366 4.645 8.273 11.123 7.989 23.046 7.465 22.487.658 22.487.658z"*/}
-                        {/*        fill="#0ED3CF" data-darkreader-inline-fill=""*/}
-                        {/*        style="--darkreader-inline-fill:#3bf2ee;"></path>*/}
-                        {/*</svg>*/}
-                        <p class="text-gray-800 dark:text-gray-200 text-xl ml-2"><strong>unsaferust.org</strong></p>
-                    </div>
-                </div>
+                        </path>
+                    </svg>
+                </button>
 
-
-                <div class="hidden lg:flex lg:flex-row lg:items-center lg:justify-between lg:flex-1 lg:space-x-2">
-                    <div
-                        class="flex flex-col space-y-3 lg:space-y-0 lg:flex-row lg:space-x-6 xl:space-x-8 lg:items-center">
-                        <a
-                            onclick={
+                <div class="hidden w-full md:block md:w-auto" id="mobile-menu">
+                    <ul class="flex flex-col mt-4 md:flex-row md:space-x-8 md:mt-0 md:text-sm md:font-medium">
+                        <li>
+                            <a onclick={
                                 (e) => {
                                     e.preventDefault();
                                     props.navigate(props.ROUTE_HOME);
                                 }
                             }
-                            href="/"
-                            class="text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-gray-400 transition-colors duration-300">Home</a>
-                        <a onclick={
-                            (e) => {
-                                e.preventDefault();
-                                props.navigate(props.ROUTE_LIST);
+                               href="#"
+                               class="dark:text-white dark:hover:text-gray-300 block py-2 pl-3 pr-4 md:p-0">Home</a>
+                        </li>
+                        <li>
+                            <a onclick={
+                                (e) => {
+                                    e.preventDefault();
+                                    props.navigate(props.ROUTE_LIST);
+                                }
                             }
-                        }
-                           href="/"
-                           class="text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-gray-400 transition-colors duration-300">Stats</a>
-                    </div>
-
-
-                    <div class="flex flex-col space-y-4 lg:space-y-0 lg:flex-row lg:items-center lg:space-x-4">
-                        <form
-                            //action="/search"
-                            class="flex flex-wrap justify-between md:flex-row"><input type="search"
-                                                                                      name="query"
-                                                                                      placeholder="Search"
-                                                                                      class="w-full h-12 px-4 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg lg:w-20 xl:transition-all xl:duration-300 xl:w-36 xl:focus:w-44 lg:h-10 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-600 focus:border-primary dark:focus:border-primary focus:outline-none focus:ring focus:ring-primary dark:placeholder-gray-400 focus:ring-opacity-20"/>
-                        </form>
-
-                        <ul class="flex flex-col mt-4 md:flex-row md:space-x-8 md:mt-0 md:text-sm md:font-medium">
-                            <li>
-                                <a target="_blank" href="https://github.com/Vagelis-Prokopiou/unsaferust.org"
-                                   class="block py-2 pl-3 pr-4 dark:text-white bg-blue-700 rounded md:bg-transparent md:text-blue-700 md:p-0 md:dark:text-white dark:bg-blue-600 md:dark:bg-transparent"
-                                   aria-current="page">
-                                    GitHub
-                                </a>
-                            </li>
-                            <li>
-                                <a href="#"
-                                   class="block py-2 pl-3 pr-4 text-gray-700 border-b border-gray-100 hover:bg-gray-50 md:hover:bg-transparent md:border-0 md:hover:text-blue-700 md:p-0 dark:text-gray-400 dark:hover:text-white dark:border-gray-700 dark:hover:bg-gray-700 md:dark:hover:bg-transparent">
-                                    Contact
-                                </a>
-                            </li>
-                        </ul>
-                    </div>
+                               href="#"
+                               class="dark:text-white dark:hover:text-gray-300 block py-2 pl-3 pr-4 md:p-0">Stats</a>
+                        </li>
+                        {/*<li>*/}
+                        {/*    <form*/}
+                        {/*        //action="/search"*/}
+                        {/*        class="flex flex-wrap justify-between md:flex-row"><input type="search"*/}
+                        {/*                                                                  name="query"*/}
+                        {/*                                                                  placeholder="Search"*/}
+                        {/*                                                                  class="w-full h-12 px-4 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg lg:w-20 xl:transition-all xl:duration-300 xl:w-36 xl:focus:w-44 lg:h-10 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-600 focus:border-primary dark:focus:border-primary focus:outline-none focus:ring focus:ring-primary dark:placeholder-gray-400 focus:ring-opacity-20"/>*/}
+                        {/*    </form>*/}
+                        {/*</li>*/}
+                    </ul>
                 </div>
             </div>
-        </header>
+        </nav>
     );
 };
-
 export default Header;
