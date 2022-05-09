@@ -59,7 +59,7 @@ const Header: (props) => JSX.Element = (props) => {
                         <ul class="flex flex-col mt-4 md:flex-row md:space-x-8 md:mt-0 md:text-sm md:font-medium">
                             <li>
                                 <a target="_blank" href="https://github.com/Vagelis-Prokopiou/unsaferust.org"
-                                   class="block py-2 pl-3 pr-4 text-white bg-blue-700 rounded md:bg-transparent md:text-blue-700 md:p-0 md:dark:text-white dark:bg-blue-600 md:dark:bg-transparent"
+                                   class="block py-2 pl-3 pr-4 dark:text-white bg-blue-700 rounded md:bg-transparent md:text-blue-700 md:p-0 md:dark:text-white dark:bg-blue-600 md:dark:bg-transparent"
                                    aria-current="page">
                                     GitHub
                                 </a>

@@ -17,16 +17,16 @@ const ProjectStatsList: (props) => JSX.Element = (props) => {
                     <div class="py-4 inline-block min-w-full sm:px-6 lg:px-8">
                         <div class="overflow-hidden">
                             <table class="min-w-full text-center">
-                                <thead class="border-b bg-gray-800">
+                                <thead class="border-b dark:bg-gray-800">
                                 <tr>
-                                    <th scope="col" class="text-white px-6 py-4">Name</th>
-                                    <th scope="col" class="text-white px-6 py-4">Code lines</th>
-                                    <th scope="col" class="text-white px-6 py-4">Unsafe lines</th>
-                                    <th scope="col" class="text-white px-6 py-4">Created at</th>
-                                    <th scope="col" class="text-white px-6 py-4">Updated at</th>
-                                    <th scope="col" class="text-white px-6 py-4">Project details
+                                    <th scope="col" class="dark:text-white px-6 py-4">Name</th>
+                                    <th scope="col" class="dark:text-white px-6 py-4">Code lines</th>
+                                    <th scope="col" class="dark:text-white px-6 py-4">Unsafe lines</th>
+                                    <th scope="col" class="dark:text-white px-6 py-4">Created at</th>
+                                    <th scope="col" class="dark:text-white px-6 py-4">Updated at</th>
+                                    <th scope="col" class="dark:text-white px-6 py-4">Project details
                                     </th>
-                                    <th scope="col" class="text-white px-6 py-4">
+                                    <th scope="col" class="dark:text-white px-6 py-4">
                                         <label for="items-per-page"
                                                class="block mb-2 text-sm font-medium text-gray-900 dark:text-gray-400"
                                         >Select items per page</label>
@@ -54,19 +54,19 @@ const ProjectStatsList: (props) => JSX.Element = (props) => {
                                             (projectStat) => {
                                                 return (
                                                     <tr>
-                                                        <td class="text-white px-6 py-4">
+                                                        <td class="dark:text-white px-6 py-4">
                                                             <a target="_blank"
                                                                href={projectStat.url}>{projectStat.name}</a>
                                                         </td>
-                                                        <td class="text-white px-6 py-4">{projectStat.code_lines}</td>
-                                                        <td class="text-white px-6 py-4">{projectStat.unsafe_lines}</td>
-                                                        <td class="text-white px-6 py-4">{projectStat.created_at}</td>
-                                                        <td class="text-white px-6 py-4">{projectStat.updated_at}</td>
-                                                        <td class="text-white px-6 py-4">
+                                                        <td class="dark:text-white px-6 py-4">{projectStat.code_lines}</td>
+                                                        <td class="dark:text-white px-6 py-4">{projectStat.unsafe_lines}</td>
+                                                        <td class="dark:text-white px-6 py-4">{projectStat.created_at}</td>
+                                                        <td class="dark:text-white px-6 py-4">{projectStat.updated_at}</td>
+                                                        <td class="dark:text-white px-6 py-4">
                                                             <button
                                                                 onclick={() => props.navigate(projectStat.project_id)}
                                                                 type="button"
-                                                                class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm p-2.5 text-center inline-flex items-center mr-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                                                                class="dark:text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm p-2.5 text-center inline-flex items-center mr-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
                                                                 <svg class="w-5 h-5" fill="currentColor"
                                                                      viewBox="0 0 20 20"
                                                                      xmlns="http://www.w3.org/2000/svg">
