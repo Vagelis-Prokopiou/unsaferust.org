@@ -6,15 +6,17 @@ import ProjectStatDetails from './components/ProjectStatDetails';
 import Pager from './components/Pager';
 import Header from './components/Header';
 import Footer from './components/Footer';
+import Home from './components/Home';
 import {JSX, createResource, Show, createSignal, createEffect} from "solid-js";
 
 // Constants
+const ROUTE_HOME = 'home';
 const ROUTE_LIST = 'list';
 const ROUTE_DETAILS = 'details';
 
 
 // Signals
-const [getRoute, setRoute] = createSignal(ROUTE_LIST);
+const [getRoute, setRoute] = createSignal(ROUTE_HOME);
 const [getProjectId, setProjectId] = createSignal(0);
 const [getPaginationOptions, setPaginationOptions] = createSignal({
     id: 0,
@@ -61,11 +63,18 @@ function getMinProjectId() {
 const App: () => JSX.Element = () => {
     return (
         <div id="app" class="flex flex-col min-h-screen font-roboto dark:bg-gray-900">
-            <Header/>
+            <Header
+                navigate={(route) => setRoute(route)}
+                ROUTE_HOME={ROUTE_HOME}
+                ROUTE_LIST={ROUTE_LIST}
+            />
 
             <main class="flex-1 lg:mt-20">
                 <section class="container px-4 py-10 mx-auto">
 
+                    <Show when={getRoute() === ROUTE_HOME}>
+                        <Home/>
+                    </Show>
 
                     <Show when={getRoute() === ROUTE_LIST}>
                         <ProjectStatsList

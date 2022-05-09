@@ -1,3 +1,2 @@
 https://github.com/rust-lang/regex
 https://github.com/http-rs/tide
-https://gitlab.redox-os.org/redox-os/redox

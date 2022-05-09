@@ -1,6 +1,6 @@
 // https://tailwindcomponents.com/components/tables?page=2
 
-import {JSX, Show} from 'solid-js';
+import {JSX} from 'solid-js';
 
 const Header: (props) => JSX.Element = (props) => {
     return (
@@ -27,8 +27,23 @@ const Header: (props) => JSX.Element = (props) => {
                 <div class="hidden lg:flex lg:flex-row lg:items-center lg:justify-between lg:flex-1 lg:space-x-2">
                     <div
                         class="flex flex-col space-y-3 lg:space-y-0 lg:flex-row lg:space-x-6 xl:space-x-8 lg:items-center">
-                        {/*<a href="/"*/}
-                        {/*   class="text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-gray-400 transition-colors duration-300">Home</a>*/}
+                        <a
+                            onclick={
+                                (e) => {
+                                    e.preventDefault();
+                                    props.navigate(props.ROUTE_HOME);
+                                }
+                            }
+                            href="/"
+                            class="text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-gray-400 transition-colors duration-300">Home</a>
+                        <a onclick={
+                            (e) => {
+                                e.preventDefault();
+                                props.navigate(props.ROUTE_LIST);
+                            }
+                        }
+                           href="/"
+                           class="text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-gray-400 transition-colors duration-300">Stats</a>
                     </div>
 
 
