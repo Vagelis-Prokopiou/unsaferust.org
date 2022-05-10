@@ -22,6 +22,7 @@ const ProjectStatsList: (props) => JSX.Element = (props) => {
                                     <th scope="col" class="dark:text-white px-6 py-4">Name</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Code lines</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Unsafe lines</th>
+                                    <th scope="col" class="dark:text-white px-6 py-4">(Unsafe / code) ratio</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Created at</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Updated at</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Project details
@@ -60,6 +61,7 @@ const ProjectStatsList: (props) => JSX.Element = (props) => {
                                                         </td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.code_lines}</td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.unsafe_lines}</td>
+                                                        <td class="dark:text-white px-6 py-4">{projectStat.percentage}</td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.created_at}</td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.updated_at}</td>
                                                         <td class="dark:text-white px-6 py-4">

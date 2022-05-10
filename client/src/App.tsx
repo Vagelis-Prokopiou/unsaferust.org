@@ -42,6 +42,12 @@ const [projectStatsList] = createResource(
         const url = `${import.meta.env.VITE_SERVER_URL}/project-stats?id=${id}&limit=${limit}&direction=${direction}`;
         const _ = await fetch(url);
         const data = await _.json();
+        data.project_stats = data.project_stats.map(i => {
+            const obj = {...i};
+            const percentage = obj.unsafe_lines > 0 ? (obj.unsafe_lines / obj.code_lines) : 0;
+            obj.percentage = `${percentage.toFixed(3)}%`;
+            return obj;
+        });
         return data;
     });
 
