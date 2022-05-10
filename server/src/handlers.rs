@@ -200,10 +200,10 @@ pub async fn project_stats_get_all(
             inner join providers on providers.id = p.provider_id
             where ps.project_id {direction} {project_id}
             and p.name like concat('%', $1 , '%')
-            order by ps.created_at desc, p.name
             limit {limit}
         ) as t
-        where rank_order = 1");
+        where t.rank_order = 1
+        order by t.name");
     let rows = sqlx::query(query.as_ref())
         .bind(name)
         .fetch_all(db.as_ref())
