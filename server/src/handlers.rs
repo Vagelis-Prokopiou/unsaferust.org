@@ -170,9 +170,9 @@ pub async fn project_stats_get_all(
     name_filter: web::Query<ProjectStatsNameFilter>,
 ) -> impl Responder {
     let limit = pagination_options.limit.unwrap_or(50);
-    let page = pagination_options.page.unwrap_or(1) - 1;
     let name = (name_filter.name.as_ref().unwrap_or(&"".to_owned())).clone();
     let name_filtering = { if name.is_empty() { "" } else { "and name like concat('%', $1, '%')" } };
+    let page = if !name_filtering.is_empty() { 0 } else { pagination_options.page.unwrap_or(1) - 1 };
     let query = format!("
 select t.project_id
      , t.name
