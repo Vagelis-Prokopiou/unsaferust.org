@@ -4,11 +4,8 @@
 // Todo: Use redis. Use request uris as keys
 // Todo: Check why update is blocking. Comment the db stuff and check performance.
 // Todo: Add redis caching
-// Todo: Add import url for new projects
-// Todo: Fix pagination
 // Todo: Fix search
 // Todo: Use client caching too
-// Todo: Fix footer in mobile
 // Todo: Add most popular packages
 
 use std::io::BufRead;
