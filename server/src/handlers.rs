@@ -1,3 +1,4 @@
+use std::io::BufRead;
 use std::sync::{Arc, Mutex};
 use futures::future;
 use tokio;
@@ -274,3 +275,39 @@ pub async fn projects_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Re
     return web::Json(project_stats);
 }
 
+pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
+    let file = std::fs::File::open("./data/projects.txt")
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    for line in std::io::BufReader::new(file).lines().flatten() {
+        if line.is_empty() { continue; }
+        let parts: Vec<&str> = line.split('/').collect();
+        if parts.len() != 5 {
+            eprint!("Problem with line: {line}");
+            continue;
+        }
+
+        let provider_url = format!("{}//{}", parts[0], parts[2]);
+        let namespace = parts[3];
+        let name = parts[4];
+        // Todo: Log the failure.
+        let _ = sqlx::query(&format!("
+                do
+                $do$
+                begin
+                if not exists (select id from projects where name = '{name}') then
+                    insert into projects (provider_id, namespace, name)
+                     VALUES (
+                     (select id from providers where url = '{provider_url}'),
+                     '{namespace}',
+                     '{name}'
+                     );
+                end if;
+                end
+                $do$
+    "))
+            .execute(db.as_ref())
+            .await;
+    }
+
+    return Ok(HttpResponse::Ok());
+}

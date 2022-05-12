@@ -72,40 +72,6 @@ async fn main() -> std::io::Result<()> {
             .await
             .expect("Failed to insert to providers");
     }
-
-
-    // Reading line by line
-    let file = std::fs::File::open("./data/projects.txt").expect("Failed to read projects.txt file");
-    for line in std::io::BufReader::new(file).lines().flatten() {
-        if line.is_empty() { continue; }
-        let parts: Vec<&str> = line.split('/').collect();
-        if parts.len() != 5 {
-            eprint!("Problem with line: {line}");
-            continue;
-        }
-
-        let provider_url = format!("{}//{}", parts[0], parts[2]);
-        let namespace = parts[3];
-        let name = parts[4];
-        sqlx::query(&format!("
-                do
-                $do$
-                begin
-                if not exists (select id from projects where name = '{name}') then
-                    insert into projects (provider_id, namespace, name)
-                     VALUES (
-                     (select id from providers where url = '{provider_url}'),
-                     '{namespace}',
-                     '{name}'
-                     );
-                end if;
-                end
-                $do$
-    "))
-            .execute(&db)
-            .await
-            .expect("Failed to insert to projects");
-    }
     // Todo: Delete when done =========================================================================
 
 

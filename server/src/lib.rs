@@ -53,6 +53,7 @@ pub fn run(
                             )
                             .service(
                                 web::scope("/projects")
+                                    .route("/import", web::get().to(projects_import))
                                     .route("/{id}", web::get().to(projects_get_by_id))
                                     .route("", web::get().to(projects_get_all))
                             )
