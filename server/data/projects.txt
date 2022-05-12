@@ -38,3 +38,5 @@ https://github.com/http-rs/tide
 https://github.com/SergioBenitez/Rocket
 https://github.com/firecracker-microvm/firecracker
 https://github.com/tauri-apps/tauri
+https://github.com/yewstack/yew
+https://github.com/meilisearch/meilisearch
