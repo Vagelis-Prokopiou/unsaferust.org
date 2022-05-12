@@ -91,6 +91,7 @@ const App: () => JSX.Element = () => {
                                 const paginationOptions = {...getPaginationOptions()};
                                 if (paginationOptions.name === crateName) return false;
                                 paginationOptions.name = crateName;
+                                paginationOptions.page = 1;
                                 setPaginationOptions(paginationOptions);
                             }}
                         />
