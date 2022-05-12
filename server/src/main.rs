@@ -1,4 +1,4 @@
-// Todo: Add home page with info
+// Todo: Add cascade on delete to projects.
 // Todo: Add error handling
 // Todo: Add logging
 // Todo: Use redis. Use request uris as keys

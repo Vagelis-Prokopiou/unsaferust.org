@@ -18,11 +18,7 @@ const ROUTE_DETAILS = 'details';
 // Signals
 const [getRoute, setRoute] = createSignal(ROUTE_HOME);
 const [getProjectId, setProjectId] = createSignal(0);
-const [getPaginationOptions, setPaginationOptions] = createSignal({
-    id: 0,
-    limit: 25,
-    direction: "asc"
-});
+const [getPaginationOptions, setPaginationOptions] = createSignal({limit: 25, page: 1, name: ""});
 
 // Resources
 const [projectStats] = createResource(
@@ -38,8 +34,12 @@ const [projectStats] = createResource(
 const [projectStatsList] = createResource(
     getPaginationOptions,
     async (paginationOptions) => {
-        const {id, limit, direction} = paginationOptions;
-        const url = `${import.meta.env.VITE_SERVER_URL}/project-stats?id=${id}&limit=${limit}&direction=${direction}`;
+        const {page, limit, name} = paginationOptions;
+        let uri = `project-stats?page=${page}&limit=${limit}`;
+        if (name) {
+            uri += `&name=${name}`;
+        }
+        const url = `${import.meta.env.VITE_SERVER_URL}/${uri}`;
         const _ = await fetch(url);
         const data = await _.json();
         data.project_stats = data.project_stats.map(i => {
@@ -51,19 +51,12 @@ const [projectStatsList] = createResource(
         return data;
     });
 
-function getMaxProjectId() {
-    return projectStatsList()
-        .project_stats
-        .map(item => item.project_id)
-        .sort()
-        .reverse()[0] || 0;
-}
-
-function getMinProjectId() {
-    return projectStatsList()
-        .project_stats
-        .map(item => item.project_id)
-        .sort()[0] || 0;
+/* ================== */
+/* Utility functions  */
+/* ================== */
+const getNumberOfShownRecords = function () {
+    const paginationOptions = getPaginationOptions();
+    return (paginationOptions.page - 1) * paginationOptions.limit + projectStatsList().project_stats.length;
 }
 
 const App: () => JSX.Element = () => {
@@ -97,33 +90,21 @@ const App: () => JSX.Element = () => {
                         />
 
                         <Pager
-                            numberOfCurrentItems={!projectStatsList.loading && projectStatsList().project_stats.length}
+                            numberOfShownRecords={getNumberOfShownRecords}
                             numberOfTotalItems={!projectStatsList.loading && projectStatsList().meta.total}
                             paginate={(direction) => {
                                 // This is for desc
-                                let minProjectId = getMinProjectId();
-                                const itemsPerPage = parseInt(document.getElementById("items-per-page").value);
-                                if (minProjectId < itemsPerPage) {
-                                    minProjectId = itemsPerPage;
+                                const newOptions = {...getPaginationOptions()};
+                                if (direction === 'asc') {
+                                    const total = projectStatsList().meta.total;
+                                    const shown = getNumberOfShownRecords();
+                                    if (shown >= total) return;
+                                    newOptions.page += 1;
+                                } else {
+                                    if (newOptions.page < 2) return;
+                                    newOptions.page -= 1;
                                 }
-                                const newOptions = {
-                                    direction,
-                                    limit: getPaginationOptions().limit,
-                                    id: (direction === 'asc')
-                                        ? getMaxProjectId()
-                                        : minProjectId
-                                };
-                                const existingOptions = getPaginationOptions();
-                                if (JSON.stringify(newOptions) === JSON.stringify(existingOptions)) {
-                                    return false;
-                                }
-                                setPaginationOptions({
-                                    direction,
-                                    limit: getPaginationOptions().limit,
-                                    id: (direction === 'asc')
-                                        ? getMaxProjectId()
-                                        : minProjectId
-                                });
+                                setPaginationOptions(newOptions);
                             }}
                         />
                     </Show>

@@ -6,12 +6,12 @@ const Pager: (props) => JSX.Element = (props) => {
             <div class="flex flex-col items-center">
                 <span class="text-sm text-gray-700 dark:text-gray-400">
                 Showing <span
-                    class="font-semibold text-gray-900 dark:text-white"> {props.numberOfCurrentItems} </span> of <span
+                    class="font-semibold text-gray-900 dark:text-white"> {props.numberOfShownRecords()} </span> of <span
                     class="font-semibold text-gray-900 dark:text-white"> {props.numberOfTotalItems} </span> Entries
                 </span>
                 <div class="inline-flex mt-2 xs:mt-0">
                     <button onclick={() => props.paginate("desc")}
-                            class="inline-flex items-center py-2 px-4 text-sm font-medium hover:bg-gray-100 rounded-l dark:text-gray-400 dark:hover:bg-gray-700">
+                            class="inline-flex items-center py-2 px-4 text-sm font-medium hover:bg-gray-100 rborder-gray-500 rounded-r border-l hover:bg-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700">
                         <svg class="mr-2 w-5 h-5" fill="currentColor" viewBox="0 0 20 20"
                              xmlns="http://www.w3.org/2000/svg">
                             <path fill-rule="evenodd"

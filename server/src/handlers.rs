@@ -169,41 +169,32 @@ pub async fn project_stats_get_all(
     name_filter: web::Query<ProjectStatsNameFilter>,
 ) -> impl Responder {
     let limit = pagination_options.limit.unwrap_or(50);
-    let project_id = pagination_options.project_id.unwrap_or(0);
-    let direction = match &pagination_options.direction {
-        Some(v) => { if v.to_lowercase() == "desc" { "<" } else { ">" } }
-        None => ">"
-    };
+    let page = pagination_options.page.unwrap_or(1) - 1;
     let name = (name_filter.name.as_ref().unwrap_or(&"".to_owned())).clone();
     let query = format!("
-        select
-            t.project_id
-            ,t.name
-            ,t.url
-            ,t.code_lines
-            ,t.unsafe_lines
-            ,t.created_at
-            ,t.updated_at
-            ,COUNT(project_id) OVER () as total
-         from (
-            select
-            RANK() OVER (partition by ps.project_id ORDER BY ps.created_at desc) as rank_order
-            ,ps.project_id
-            ,p.name
-            ,concat(providers.url, '/', p.namespace, '/', p.name) as url
-            ,ps.code_lines
-            ,ps.unsafe_lines
-            ,COALESCE(cast(ps.created_at as text), '') as created_at
-            ,COALESCE(cast(ps.updated_at as text), '') as updated_at
-            from project_stats as ps
-            inner join projects as p on p.id = ps.project_id
-            inner join providers on providers.id = p.provider_id
-            where ps.project_id {direction} {project_id}
-            and p.name like concat('%', $1 , '%')
-            limit {limit}
-        ) as t
-        where t.rank_order = 1
-        order by t.name");
+select t.project_id
+     , t.name
+     , t.url
+     , t.code_lines
+     , t.unsafe_lines
+     , t.created_at
+     , t.updated_at
+     , COUNT(project_id) OVER () as total
+from (
+     select RANK() OVER (partition by ps.project_id ORDER BY ps.created_at desc) as rank_order
+          , ps.project_id
+          , p.name
+          , concat(providers.url, '/', p.namespace, '/', p.name)                 as url
+          , ps.code_lines
+          , ps.unsafe_lines
+          , COALESCE(cast(ps.created_at as text), '')                            as created_at
+          , COALESCE(cast(ps.updated_at as text), '')                            as updated_at
+     from project_stats as ps
+              inner join projects as p on p.id = ps.project_id
+              inner join providers on providers.id = p.provider_id
+     order by p.name) as t
+where t.rank_order = 1
+limit {limit} offset ({limit} * {page});");
     let rows = sqlx::query(query.as_ref())
         .bind(name)
         .fetch_all(db.as_ref())
@@ -231,7 +222,6 @@ pub async fn project_stats_get_all(
     });
     return web::Json(result);
 }
-
 
 pub async fn providers_get_all(db: web::Data<PgPool>) -> impl Responder {
     let providers: Vec<Provider> = sqlx::query_as("select * from providers")
