@@ -87,6 +87,12 @@ const App: () => JSX.Element = () => {
                             }}
                             getPaginationOptions={getPaginationOptions}
                             setPaginationOptions={setPaginationOptions}
+                            search={(crateName) => {
+                                const paginationOptions = {...getPaginationOptions()};
+                                if (paginationOptions.name === crateName) return false;
+                                paginationOptions.name = crateName;
+                                setPaginationOptions(paginationOptions);
+                            }}
                         />
 
                         <Pager

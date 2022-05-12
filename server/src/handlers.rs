@@ -172,6 +172,7 @@ pub async fn project_stats_get_all(
     let limit = pagination_options.limit.unwrap_or(50);
     let page = pagination_options.page.unwrap_or(1) - 1;
     let name = (name_filter.name.as_ref().unwrap_or(&"".to_owned())).clone();
+    let name_filtering = { if name.is_empty() { "" } else { "and name like concat('%', $1, '%')" } };
     let query = format!("
 select t.project_id
      , t.name
@@ -191,10 +192,11 @@ from (
           , COALESCE(cast(ps.created_at as text), '')                            as created_at
           , COALESCE(cast(ps.updated_at as text), '')                            as updated_at
      from project_stats as ps
-              inner join projects as p on p.id = ps.project_id
-              inner join providers on providers.id = p.provider_id
+     inner join projects as p on p.id = ps.project_id
+     inner join providers on providers.id = p.provider_id
      order by p.name) as t
 where t.rank_order = 1
+{name_filtering}
 limit {limit} offset ({limit} * {page});");
     let rows = sqlx::query(query.as_ref())
         .bind(name)
