@@ -40,3 +40,4 @@ https://github.com/firecracker-microvm/firecracker
 https://github.com/tauri-apps/tauri
 https://github.com/yewstack/yew
 https://github.com/meilisearch/meilisearch
+https://github.com/diesel-rs/diesel
