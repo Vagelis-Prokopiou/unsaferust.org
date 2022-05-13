@@ -22,7 +22,7 @@ pub struct ProjectWithUrl {
 #[derive(Debug, serde::Deserialize, serde::Serialize, sqlx::FromRow)]
 pub struct ProjectStatsDTO {
     pub(crate) project_id: i32,
-    pub(crate) name: String,
+    pub name: String,
     pub(crate) url: String,
     pub(crate) code_lines: i32,
     pub(crate) unsafe_lines: i32,

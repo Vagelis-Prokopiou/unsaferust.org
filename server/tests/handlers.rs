@@ -3,7 +3,7 @@ use sqlx::Executor;
 use sqlx::{Connection, PgConnection, PgPool};
 use std::net::TcpListener;
 use unsaferust::models::configuration::DatabaseSettings;
-use unsaferust::models::project::{Project, ProjectStats};
+use unsaferust::models::project::{Project, ProjectStats, ProjectStatsDTO};
 use unsaferust::models::provider::Provider;
 use uuid::Uuid;
 
@@ -163,6 +163,253 @@ async fn test_project_stats_get_all() {
     assert_eq!(project_stats[1].unsafe_lines, 11);
     assert_eq!(project_stats[1].created_at, "2021-01-01");
     // Todo: Add testing for the meta property.
+}
+
+#[tokio::test]
+async fn test_project_stats_pagination() {
+    let (address, db) = spawn_app().await;
+
+    // Setup
+    let _result = create_provider(&db).await;
+    for i in 1..10 {
+        let _ = sqlx::query(
+            &format!("
+            insert into projects (provider_id, name, namespace)
+            values (1, 'name_{i}', 'namespace_{i}')")
+        )
+            .execute(&db)
+            .await
+            .expect("Failed to create entry");
+
+        let _ = sqlx::query(
+            &format!("
+            insert into project_stats (project_id, code_lines, unsafe_lines)
+            values ({i}, '{i}', '{i}')")
+        )
+            .execute(&db)
+            .await
+            .expect("Failed to create entry");
+    }
+
+    // Start requesting
+    // 1. Get all items.
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=1&limit=25", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStats> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 9);
+
+    // 1. Get 3 items per page (page 1).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=1&limit=3", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 3);
+    assert_eq!(project_stats[0].name, "name_1");
+    assert_eq!(project_stats[1].name, "name_2");
+    assert_eq!(project_stats[2].name, "name_3");
+
+    // 1. Get 3 items per page (page 3).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=3&limit=3", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 3);
+    assert_eq!(project_stats[0].name, "name_7");
+    assert_eq!(project_stats[1].name, "name_8");
+    assert_eq!(project_stats[2].name, "name_9");
+
+    // 1. Get 4 items per page (page 2).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=2&limit=4", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 4);
+    assert_eq!(project_stats[0].name, "name_5");
+    assert_eq!(project_stats[1].name, "name_6");
+    assert_eq!(project_stats[2].name, "name_7");
+    assert_eq!(project_stats[3].name, "name_8");
+
+    // 1. Get 8 items per page (page 2).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=2&limit=8", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 1);
+    assert_eq!(project_stats[0].name, "name_9");
+}
+
+#[tokio::test]
+async fn test_project_stats_pagination_with_name() {
+    let (address, db) = spawn_app().await;
+
+    // Setup
+    let _result = create_provider(&db).await;
+    // Insert foo
+    for i in 1..10 {
+        let _ = sqlx::query(
+            &format!("
+            insert into projects (id, provider_id, name, namespace)
+            values ({i}, 1, 'foo_{i}', 'namespace_{i}')")
+        )
+            .execute(&db)
+            .await
+            .expect("Failed to create entry");
+
+        let _ = sqlx::query(
+            &format!("
+            insert into project_stats (project_id, code_lines, unsafe_lines)
+            values ({i}, '{i}', '{i}')
+            ")
+        )
+            .execute(&db)
+            .await
+            .expect("Failed to create entry");
+    }
+
+    // Insert bar
+    for i in 1..10 {
+        let _ = sqlx::query(
+            &format!("
+            insert into projects (id, provider_id, name, namespace)
+            values (({i} + 9), 1, 'bar_{i}', 'namespace_{i}')")
+        )
+            .execute(&db)
+            .await
+            .expect("Failed to create entry");
+
+        let _ = sqlx::query(
+            &format!("
+            insert into project_stats (project_id, code_lines, unsafe_lines)
+            values (({i} + 9), '{i}', '{i}')
+            ")
+        )
+            .execute(&db)
+            .await
+            .expect("Failed to create entry");
+    }
+
+    // Start requesting
+    // 1. Get all items.
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=1&limit=25", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStats> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 18);
+
+    // 1. Get 3 foo items per page (page 1).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=1&limit=3&name=foo", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 3);
+    assert_eq!(project_stats[0].name, "foo_1");
+    assert_eq!(project_stats[1].name, "foo_2");
+    assert_eq!(project_stats[2].name, "foo_3");
+
+
+    // 1. Get 3 foo items per page (page 3).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=3&limit=3&name=foo", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 3);
+    assert_eq!(project_stats[0].name, "foo_7");
+    assert_eq!(project_stats[1].name, "foo_8");
+    assert_eq!(project_stats[2].name, "foo_9");
+
+
+    // 1. Get 4 bar items per page (page 2).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=2&limit=4&name=bar", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 4);
+    assert_eq!(project_stats[0].name, "bar_5");
+    assert_eq!(project_stats[1].name, "bar_6");
+    assert_eq!(project_stats[2].name, "bar_7");
+    assert_eq!(project_stats[3].name, "bar_8");
+
+    // 1. Get 8 bar items per page (page 2).
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=2&limit=8&name=bar", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 1);
+    assert_eq!(project_stats[0].name, "bar_9");
+
+    // Get a non existent item
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats?page=2&limit=8&name=hello", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 0);
 }
 
 #[tokio::test]
