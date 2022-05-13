@@ -22,9 +22,11 @@ services:
     ports:
       - ${SERVER_PORT:-3001}:${SERVER_PORT:-3001}
     volumes:
-      - ./server/src:/app/src
       # This is for development
       - /tmp/rust_projects:/tmp/rust_projects
+
+      # This is needed for live projects updates
+      - ./server/data:/app/data
     env_file:
       - .env
     restart: ${RESTART_POLICY:-unless-stopped}
