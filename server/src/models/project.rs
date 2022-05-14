@@ -25,8 +25,8 @@ pub struct ProjectStatsDTO {
     pub name: String,
     pub(crate) url: String,
     pub(crate) code_lines: i32,
-    pub(crate) unsafe_lines: i32,
-    pub(crate) created_at: String,
+    pub unsafe_lines: i32,
+    pub created_at: String,
     pub(crate) updated_at: String,
 }
 

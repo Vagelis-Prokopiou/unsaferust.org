@@ -115,8 +115,9 @@ async fn create_project_stats(db: &PgPool) -> bool {
     return result.rows_affected() == 4;
 }
 
-
-// /project/stats/update
+/*****************/
+/* project-stats */
+/*****************/
 #[tokio::test]
 async fn test_project_stats_update() {
     let (address, db) = spawn_app().await;
@@ -135,34 +136,6 @@ async fn test_project_stats_update() {
     // Assert
     // This may need test timeout update.
     assert!(response.status().is_success());
-}
-
-#[tokio::test]
-async fn test_project_stats_get_all() {
-    let (address, db) = spawn_app().await;
-
-    // Setup
-    let _result = create_provider(&db).await;
-    let _result = create_project(&db).await;
-    let _result = create_project_stats(&db).await;
-
-    let response = CLIENT
-        .get(format!("{}/api/v1/project-stats", &address))
-        .send()
-        .await
-        .expect("Failed to execute request.");
-
-    // Assert
-    assert!(response.status().is_success());
-    let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStats> =
-        serde_json::from_value(result["project_stats"].take()).unwrap();
-    assert_eq!(project_stats.len(), 2);
-    assert_eq!(project_stats[0].unsafe_lines, 11);
-    assert_eq!(project_stats[0].created_at, "2021-01-01");
-    assert_eq!(project_stats[1].unsafe_lines, 11);
-    assert_eq!(project_stats[1].created_at, "2021-01-01");
-    // Todo: Add testing for the meta property.
 }
 
 #[tokio::test]
@@ -413,6 +386,80 @@ async fn test_project_stats_pagination_with_name() {
 }
 
 #[tokio::test]
+async fn test_project_stats_get_all() {
+    let (address, db) = spawn_app().await;
+
+    // Setup
+    let _result = create_provider(&db).await;
+    let _result = create_project(&db).await;
+    let _result = create_project_stats(&db).await;
+
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert
+    assert!(response.status().is_success());
+    let mut result: Value = response.json().await.unwrap();
+    let project_stats: Vec<ProjectStats> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
+    assert_eq!(project_stats.len(), 2);
+    assert_eq!(project_stats[0].unsafe_lines, 11);
+    assert_eq!(project_stats[0].created_at, "2021-01-01");
+    assert_eq!(project_stats[1].unsafe_lines, 11);
+    assert_eq!(project_stats[1].created_at, "2021-01-01");
+    // Todo: Add testing for the meta property.
+}
+
+#[tokio::test]
+async fn test_project_stats_get_by_id() {
+    let (address, db) = spawn_app().await;
+
+    // Setup
+    let _result = create_provider(&db).await;
+    let _result = create_project(&db).await;
+    let _result = create_project_stats(&db).await;
+
+    // Testing with project id 1.
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats/1", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert (we must get 2 records for id 1 in created_at desc)
+    assert!(response.status().is_success());
+    let project_stats: Vec<ProjectStats> = response.json().await.unwrap();
+    assert_eq!(project_stats.len(), 2);
+    assert_eq!(project_stats[0].unsafe_lines, 11);
+    assert_eq!(project_stats[0].created_at, "2021-01-01");
+    assert_eq!(project_stats[1].unsafe_lines, 10);
+    assert_eq!(project_stats[1].created_at, "2020-01-01");
+
+    // Testing with project id 2.
+    let response = CLIENT
+        .get(format!("{}/api/v1/project-stats/2", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+
+    // Assert (we must get 2 records for id 2 in created_at desc)
+    assert!(response.status().is_success());
+    let project_stats: Vec<ProjectStats> = response.json().await.unwrap();
+    assert_eq!(project_stats.len(), 2);
+    assert_eq!(project_stats[0].unsafe_lines, 11);
+    assert_eq!(project_stats[0].created_at, "2021-01-01");
+    assert_eq!(project_stats[1].unsafe_lines, 20);
+    assert_eq!(project_stats[1].created_at, "2020-01-01");
+}
+
+
+/*************/
+/* providers */
+/*************/
+#[tokio::test]
 async fn test_providers_get_all() {
     let (address, db) = spawn_app().await;
 
@@ -464,6 +511,10 @@ async fn test_providers_get_by_id() {
     assert_eq!(providers.len(), 0);
 }
 
+
+/************/
+/* projects */
+/************/
 #[tokio::test]
 async fn test_projects_get_all() {
     let (address, db) = spawn_app().await;

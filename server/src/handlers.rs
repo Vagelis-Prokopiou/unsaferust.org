@@ -138,7 +138,10 @@ pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responde
     return Ok(HttpResponse::Ok());
 }
 
-pub async fn project_stats_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+pub async fn project_stats_get_by_id(
+    db: Data<PgPool>,
+    id: web::Path<i32>,
+) -> Result<impl Responder, actix_web::Error> {
     // Here we return all the entries for this specific project.
     let project_stats: Vec<ProjectStats> = sqlx::query_as(
         "
@@ -155,8 +158,8 @@ pub async fn project_stats_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> im
         .bind(*id)
         .fetch_all(db.as_ref())
         .await
-        .expect("Failed to fetch projects");
-    return web::Json(project_stats);
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    return Ok(web::Json(project_stats));
 }
 
 #[derive(serde::Deserialize)]
@@ -168,7 +171,7 @@ pub async fn project_stats_get_all(
     db: Data<PgPool>,
     pagination_options: web::Query<PaginationOptions>,
     name_filter: web::Query<ProjectStatsNameFilter>,
-) -> impl Responder {
+) -> Result<impl Responder, actix_web::Error> {
     let page = pagination_options.page.unwrap_or(1) - 1;
     let limit = pagination_options.limit.unwrap_or(50);
     let name = (name_filter.name.as_ref().unwrap_or(&"".to_owned())).clone();
@@ -202,7 +205,8 @@ limit {limit} offset ({limit} * {page});");
         .bind(name)
         .fetch_all(db.as_ref())
         .await
-        .expect("");
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
     let project_stats: Vec<ProjectStatsDTO> = rows
         .iter()
         .map(|row| {
@@ -217,13 +221,15 @@ limit {limit} offset ({limit} * {page});");
             );
         })
         .collect();
+
     // Todo: Add a type for this response.
     let total: i64 = if rows.is_empty() { 0 } else { rows[0].get("total") };
     let result = serde_json::json!({
         "project_stats": project_stats,
         "meta": { "total": total }
     });
-    return web::Json(result);
+
+    return Ok(web::Json(result));
 }
 
 pub async fn providers_get_all(db: web::Data<PgPool>) -> impl Responder {
