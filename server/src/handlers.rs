@@ -162,19 +162,13 @@ pub async fn project_stats_get_by_id(
     return Ok(web::Json(project_stats));
 }
 
-#[derive(serde::Deserialize)]
-pub struct ProjectStatsNameFilter {
-    name: Option<String>,
-}
-
 pub async fn project_stats_get_all(
     db: Data<PgPool>,
     pagination_options: web::Query<PaginationOptions>,
-    name_filter: web::Query<ProjectStatsNameFilter>,
 ) -> Result<impl Responder, actix_web::Error> {
     let page = pagination_options.page.unwrap_or(1) - 1;
     let limit = pagination_options.limit.unwrap_or(50);
-    let name = (name_filter.name.as_ref().unwrap_or(&"".to_owned())).clone();
+    let name = match &pagination_options.name { Some(v) => v.as_ref(), None => "" };
     let name_filtering = { if name.is_empty() { "" } else { "and name ilike concat('%', $1, '%')" } };
     let query = format!("
 select t.project_id

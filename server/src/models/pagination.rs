@@ -3,4 +3,5 @@
 pub struct PaginationOptions {
     pub(crate) limit: Option<u32>,
     pub(crate) page: Option<u32>,
+    pub(crate) name: Option<String>,
 }
