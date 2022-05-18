@@ -15,7 +15,14 @@ use sqlx::PgPool;
 pub fn run(
     listener: std::net::TcpListener,
     db: PgPool,
+    redis_connection: redis::aio::Connection,
 ) -> Result<Server, std::io::Error> {
+    let redis = Data::new(std::sync::Mutex::new(redis_connection));
+
+    // let _: () = redis.lock().unwrap().set("my_key", 42).unwrap();
+    // let result: u32 = redis.lock().unwrap().get("my_key").unwrap();
+    // println!("result: {result}");
+
     let db = Data::new(db);
     let server = HttpServer::new(move || {
         let cors = actix_cors::Cors::default()
@@ -25,7 +32,6 @@ pub fn run(
             .allowed_origin("http://unsaferust.org")
             .allowed_methods(vec!["GET"])
             .max_age(3600);
-
 
         App::new()
             .wrap(DefaultHeaders::new().add(("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")))
@@ -40,12 +46,14 @@ pub fn run(
             .wrap(DefaultHeaders::new().add(("Cross-Origin-Embedder-Policy", "require-corp")))
             .wrap(cors)
             .app_data(db.clone())
+            .app_data(redis.clone())
             .route("/", web::get().to(index))
             .service(
                 web::scope("/api")
+                    .route("/health_check", web::get().to(health_check))
+                    .route("/redis/flush", web::get().to(redis_flush))
                     .service(
                         web::scope("/v1")
-                            .route("/health_check", web::get().to(health_check))
                             .service(
                                 web::scope("/providers")
                                     .route("/{id}", web::get().to(providers_get_by_id))

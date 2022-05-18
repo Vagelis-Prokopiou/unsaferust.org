@@ -15,6 +15,7 @@ serde_json = "1.0"
 futures = "0.3.21"
 anyhow = "1"
 actix-cors = "0"
+redis = { version = "0", features = ["tokio-comp"] }
 
 [dev-dependencies]
 reqwest = { version = "0", features = ["json"] }

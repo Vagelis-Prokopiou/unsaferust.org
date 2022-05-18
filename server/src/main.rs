@@ -1,9 +1,8 @@
+// Todo: Fix the tests after the redis addition.
 // Todo: Add cascade on delete to projects.
 // Todo: Add error handling
 // Todo: Add logging
-// Todo: Use redis. Use request uris as keys
 // Todo: Check why update is blocking. Comment the db stuff and check performance.
-// Todo: Add redis caching
 // Todo: Fix search
 // Todo: Use client caching too
 // Todo: Add most popular packages
@@ -15,7 +14,10 @@ use unsaferust::models::configuration::DatabaseSettings;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    // let a=1;
+    let redis_host = std::env::var("REDIS_HOST").expect("env::var REDIS_HOST failed");
+    let redis_client = redis::Client::open(format!("redis://{redis_host}")).expect("Failed to create Redis client");
+    let redis_connection: redis::aio::Connection = redis_client.get_async_connection().await.expect("Failed to get Redis connection");
+
     // Prepare the variables that the run method needs.
     let server_port = std::env::var("SERVER_PORT").expect("env::var SERVER_PORT failed");
     let db_user = std::env::var("DB_USER").expect("env::var DB_USER failed");
@@ -75,5 +77,5 @@ async fn main() -> std::io::Result<()> {
     let address = format!("0.0.0.0:{}", server_port);
     println!("Listening at: {}", &address);
     let listener = TcpListener::bind(&address).expect("TcpListener failed");
-    unsaferust::run(listener, db)?.await
+    unsaferust::run(listener, db, redis_connection)?.await
 }

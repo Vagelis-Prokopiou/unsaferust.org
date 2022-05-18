@@ -1,6 +1,10 @@
 version: "3.9"
 
 services:
+  redis:
+    image: redis:7-alpine
+    restart: ${RESTART_POLICY:-unless-stopped}
+
   client:
     build:
       context: ./client
@@ -39,6 +43,7 @@ services:
       - DB_PORT=${DB_PORT}
       - DB_HOST=db
       - DB_NAME=${DB_NAME}
+      - REDIS_HOST=redis
     # Todo: Add health check
     depends_on:
       - db

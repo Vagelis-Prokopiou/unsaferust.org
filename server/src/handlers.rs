@@ -9,6 +9,8 @@ use sqlx::{PgPool, Row};
 use crate::models::project::{Project, ProjectStats, ProjectStatsDTO, ProjectWithUrl};
 use crate::models::provider::Provider;
 use anyhow::{Context};
+use redis::{RedisResult};
+use redis::AsyncCommands;
 
 pub async fn health_check() -> impl Responder { HttpResponse::Ok() }
 
@@ -164,11 +166,21 @@ pub async fn project_stats_get_by_id(
 
 pub async fn project_stats_get_all(
     db: Data<PgPool>,
+    redis: Data<std::sync::Mutex<redis::aio::Connection>>,
     pagination_options: web::Query<PaginationOptions>,
 ) -> Result<impl Responder, actix_web::Error> {
     let page = pagination_options.page.unwrap_or(1) - 1;
     let limit = pagination_options.limit.unwrap_or(50);
-    let name = match &pagination_options.name { Some(v) => v.as_ref(), None => "" };
+    let name = match &pagination_options.name {
+        Some(v) => v.as_ref(),
+        None => ""
+    };
+
+    // Todo: Create the key and get it from redis.
+    let redis_key = format!("{page}_{limit}_{name}");
+    let cached_value: RedisResult<String> = redis.lock().unwrap().get(&redis_key).await;
+    if cached_value.is_ok() { return Ok(HttpResponse::Ok().body(cached_value.unwrap())); }
+
     let name_filtering = { if name.is_empty() { "" } else { "and name ilike concat('%', $1, '%')" } };
     let query = format!("
 select t.project_id
@@ -223,7 +235,9 @@ limit {limit} offset ({limit} * {page});");
         "meta": { "total": total }
     });
 
-    return Ok(web::Json(result));
+    let json = serde_json::to_string(&result).unwrap();
+    let _: String = redis.lock().unwrap().set(&redis_key, &json).await.unwrap();
+    return Ok(HttpResponse::Ok().body(json));
 }
 
 pub async fn providers_get_all(db: web::Data<PgPool>) -> impl Responder {
@@ -311,5 +325,19 @@ pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_w
             .await;
     }
 
+    return Ok(HttpResponse::Ok());
+}
+
+pub async fn redis_flush(redis: Data<std::sync::Mutex<redis::aio::Connection>>) -> Result<impl Responder, actix_web::Error> {
+    let mut guard = redis.lock();
+    let connection = match guard.as_deref_mut() {
+        Ok(v) => v,
+        Err(_e) => return Err(actix_web::error::ErrorInternalServerError("/redis/purge: Failed to acquire connection to redis"))
+    };
+    // _result === OK
+    let _result: String = redis::cmd("FLUSHDB")
+        .query_async(connection)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
     return Ok(HttpResponse::Ok());
 }
