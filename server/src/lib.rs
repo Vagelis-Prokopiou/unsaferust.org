@@ -12,6 +12,13 @@ use actix_web::middleware::DefaultHeaders;
 use sqlx::PgPool;
 
 
+pub async fn redis_init() -> redis::aio::Connection {
+    let redis_host = std::env::var("REDIS_HOST").expect("env::var REDIS_HOST failed");
+    let redis_client = redis::Client::open(format!("redis://{redis_host}")).expect("Failed to create Redis client");
+    let redis_connection: redis::aio::Connection = redis_client.get_async_connection().await.expect("Failed to get Redis connection");
+    redis_connection
+}
+
 pub fn run(
     listener: std::net::TcpListener,
     db: PgPool,

@@ -175,11 +175,10 @@ pub async fn project_stats_get_all(
         Some(v) => v.as_ref(),
         None => ""
     };
-
-    // Todo: Create the key and get it from redis.
+    //let redis_key = if name.is_empty() { format!("{page}_{limit}") } else { format!("{page}_{limit}_{name}") };
     let redis_key = format!("{page}_{limit}_{name}");
-    let cached_value: RedisResult<String> = redis.lock().unwrap().get(&redis_key).await;
-    if cached_value.is_ok() { return Ok(HttpResponse::Ok().body(cached_value.unwrap())); }
+    let redis_value: RedisResult<String> = redis.lock().unwrap().get(&redis_key).await;
+    if redis_value.is_ok() { return Ok(HttpResponse::Ok().body(redis_value.unwrap())); }
 
     let name_filtering = { if name.is_empty() { "" } else { "and name ilike concat('%', $1, '%')" } };
     let query = format!("

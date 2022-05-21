@@ -13,7 +13,7 @@ lazy_static::lazy_static! { static ref CLIENT: reqwest::Client = reqwest::Client
 async fn test_health_check() {
     let (address, _db) = spawn_app().await;
     let response = CLIENT
-        .get(format!("{}/api/v1/health_check", &address))
+        .get(format!("{}/api/health_check", &address))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -46,9 +46,8 @@ async fn spawn_app() -> (String, PgPool) {
         db_max_connections,
     );
     let connection_pool = configure_database(&db_settings).await;
-
     let server =
-        unsaferust::run(listener, connection_pool.clone()).expect("Failed to bind address");
+        unsaferust::run(listener, connection_pool.clone(), unsaferust::redis_init().await).expect("Failed to bind address");
     let _ = tokio::spawn(server);
     // We return the application address to the caller!
     return (format!("http://127.0.0.1:{}", port), connection_pool);
@@ -63,7 +62,6 @@ pub async fn configure_database(config: &DatabaseSettings) -> PgPool {
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database.");
-
     // Migrate database
     let connection_pool = PgPool::connect(&config.get_connection_string_with_db())
         .await
@@ -166,6 +164,7 @@ async fn test_project_stats_pagination() {
 
     // Start requesting
     // 1. Get all items.
+    redis_flush(&address).await;
     let response = CLIENT
         .get(format!("{}/api/v1/project-stats?page=1&limit=25", &address))
         .send()
@@ -294,6 +293,7 @@ async fn test_project_stats_pagination_with_name() {
 
     // Start requesting
     // 1. Get all items.
+    redis_flush(&address).await;
     let response = CLIENT
         .get(format!("{}/api/v1/project-stats?page=1&limit=25", &address))
         .send()
@@ -304,6 +304,7 @@ async fn test_project_stats_pagination_with_name() {
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
     let project_stats: Vec<ProjectStats> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    println!("project_stats.len(): {}", project_stats.len());
     assert_eq!(project_stats.len(), 18);
 
     // 1. Get 3 foo items per page (page 1).
@@ -383,6 +384,15 @@ async fn test_project_stats_pagination_with_name() {
     let mut result: Value = response.json().await.unwrap();
     let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 0);
+}
+
+async fn redis_flush(address: &String) {
+    let _purge_result = CLIENT
+        .get(format!("{}/api/redis/flush", &address))
+        .send()
+        .await
+        .expect("Failed to execute request.");
+    assert_eq!(_purge_result.status(), 200);
 }
 
 #[tokio::test]

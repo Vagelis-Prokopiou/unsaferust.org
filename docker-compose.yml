@@ -4,6 +4,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: ${RESTART_POLICY:-unless-stopped}
+    ports:
+      # I export this for dev, for tests.
+      - "6379:6379"
 
   client:
     build:
