@@ -4,9 +4,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: ${RESTART_POLICY:-unless-stopped}
-    ports:
-      # I export this for dev, for tests.
-      - "6379:6379"
 
   client:
     build:
@@ -32,6 +29,7 @@ services:
       - ${SERVER_PORT:-3001}:${SERVER_PORT:-3001}
     volumes:
       - ./server/src:/app/src
+      - ./server/tests:/app/tests
       # This is for development
       - /tmp/rust_projects:/tmp/rust_projects
 
