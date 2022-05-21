@@ -1,9 +1,7 @@
-// Todo: Fix the tests after the redis addition.
 // Todo: Add cascade on delete to projects.
 // Todo: Add error handling
 // Todo: Add logging
 // Todo: Check why update is blocking. Comment the db stuff and check performance.
-// Todo: Fix search
 // Todo: Use client caching too
 // Todo: Add most popular packages
 
