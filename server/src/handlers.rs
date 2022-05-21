@@ -82,12 +82,6 @@ pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responde
                 let unsafe_lines = data[0];
                 let code_lines = data[1];
 
-                println!();
-                println!("project: {}", &project.name);
-                println!("unsafe_lines: {}", unsafe_lines);
-                println!("lines_of_code: {}", code_lines);
-                println!();
-
                 updated_projects
                     .lock()
                     .unwrap()
@@ -175,7 +169,6 @@ pub async fn project_stats_get_all(
         Some(v) => v.as_ref(),
         None => ""
     };
-    //let redis_key = if name.is_empty() { format!("{page}_{limit}") } else { format!("{page}_{limit}_{name}") };
     let redis_key = format!("{page}_{limit}_{name}");
     let redis_value: RedisResult<String> = redis.lock().unwrap().get(&redis_key).await;
     if redis_value.is_ok() { return Ok(HttpResponse::Ok().body(redis_value.unwrap())); }
@@ -266,23 +259,7 @@ pub async fn projects_get_all(db: Data<PgPool>) -> impl Responder {
 
 pub async fn projects_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Responder {
     // Here we return all the entries for this specific project.
-    let project_stats: Vec<Project> = sqlx::query_as(
-        // "
-        //                         select projects.id,
-        //                         projects.repo_name                                                           as name,
-        //                         concat(providers.url, '/', projects.repo_namespace, '/', projects.repo_name) as url,
-        //                         COALESCE(ps.unsafe_lines, 0) as unsafe_lines,
-        //                         COALESCE(ps.code_lines, 0) as code_lines,
-        //                         COALESCE(cast(ps.created_at as text), '') as created_at,
-        //                         COALESCE(cast(ps.updated_at as text), '') as updated_at
-        //                         from projects
-        //                         inner join providers on providers.id = projects.provider_id
-        //                         left join project_stats as ps on ps.project_id = projects.id
-        //                         where projects.id = $1
-        //                         order by ps.created_at desc;
-        //                     "
-        "select * from projects where id = $1"
-    )
+    let project_stats: Vec<Project> = sqlx::query_as("select * from projects where id = $1")
         .bind(*id)
         .fetch_all(db.as_ref())
         .await
