@@ -1,4 +1,3 @@
-// Place the following at the top of lib.rs (or main.rs) for global effect.
 #![allow(clippy::needless_return)]
 
 pub mod handlers;
@@ -25,11 +24,6 @@ pub fn run(
     redis_connection: redis::aio::Connection,
 ) -> Result<Server, std::io::Error> {
     let redis = Data::new(std::sync::Mutex::new(redis_connection));
-
-    // let _: () = redis.lock().unwrap().set("my_key", 42).unwrap();
-    // let result: u32 = redis.lock().unwrap().get("my_key").unwrap();
-    // println!("result: {result}");
-
     let db = Data::new(db);
     let server = HttpServer::new(move || {
         let cors = actix_cors::Cors::default()
