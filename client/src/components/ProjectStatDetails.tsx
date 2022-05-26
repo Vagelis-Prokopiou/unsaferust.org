@@ -52,7 +52,7 @@ const ProjectStatDetails: (props) => JSX.Element = (props) => {
                 </div>
             </div>
 
-            <div>
+            <div class="pt-10">
                 <button
                     onclick={props.navigate}
                     type="button"
