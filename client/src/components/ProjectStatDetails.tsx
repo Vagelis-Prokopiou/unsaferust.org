@@ -3,7 +3,9 @@ import {JSX} from 'solid-js';
 const ProjectStatDetails: (props) => JSX.Element = (props) => {
     return (
         <div>
-            <h4 class="text-5xl font-semibold text-center text-gray-800 dark:text-gray-200">Project details</h4>
+            <h4 class="text-5xl font-semibold text-center text-gray-800 dark:text-gray-200">
+                Project details for {props.data[0].name}
+            </h4>
             <p class="dark:text-white text-center py-4">
                 Here, you can see the progression of the unsafe usage within the project codebase, over time.
             </p>
@@ -15,7 +17,6 @@ const ProjectStatDetails: (props) => JSX.Element = (props) => {
                             <table class="min-w-full text-center">
                                 <thead class="border-b bg-gray-800">
                                 <tr>
-                                    <th scope="col" class="dark:text-white px-6 py-4">Name</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Code lines</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Unsafe lines</th>
                                     <th scope="col" class="dark:text-white px-6 py-4">Created at</th>
@@ -29,12 +30,6 @@ const ProjectStatDetails: (props) => JSX.Element = (props) => {
                                             (projectStat) => {
                                                 return (
                                                     <tr>
-                                                        <td class="font-medium dark:text-white px-6 py-4">
-                                                            <a
-                                                                target="_blank"
-                                                                href={projectStat.url}>{projectStat.name}
-                                                            </a>
-                                                        </td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.code_lines}</td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.unsafe_lines}</td>
                                                         <td class="dark:text-white px-6 py-4">{projectStat.created_at}</td>
