@@ -59,6 +59,41 @@ const getNumberOfShownRecords = function () {
     return (paginationOptions.page - 1) * paginationOptions.limit + projectStatsList().project_stats.length;
 }
 
+/* ================== */
+/* Google chart stuff */
+/* ================== */
+const [getChart, setChart] = createSignal(null);
+createEffect(() => {
+    const chart = getChart();
+    chart && chart();
+});
+google.charts.load('current', {packages: ['corechart', 'line']});
+
+function createChart(data) {
+    if (!data) {
+        throw 'no data provided to createChart';
+    }
+    if (data.length < 2) {
+        return false;
+    }
+    const rows = data.map(r => [r.created_at, r.unsafe_lines]).reverse();
+    const dt = new google.visualization.DataTable();
+    dt.addColumn('string', 'Date');
+    dt.addColumn('number', 'Unsafe lines');
+    dt.addRows(rows);
+    const options = {
+        hAxis: {title: 'Date'},
+        vAxis: {
+            title: 'Number of lines',
+            format: 'decimal'
+        },
+        width: '100%'
+    };
+    const targetElement = document.getElementById('chart_div');
+    var chart = new google.charts.Line(targetElement);
+    return () => chart.draw(dt, google.charts.Line.convertOptions(options));
+}
+
 const App: () => JSX.Element = () => {
     return (
         <div id="app" class="flex flex-col min-h-screen font-roboto dark:bg-gray-900">
@@ -120,6 +155,7 @@ const App: () => JSX.Element = () => {
                         <ProjectStatDetails
                             data={projectStats()}
                             navigate={() => setRoute(ROUTE_LIST)}
+                            createChart={() => setChart(createChart(projectStats()))}
                         />
                     </Show>
                 </section>

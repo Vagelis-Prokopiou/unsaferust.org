@@ -1,14 +1,22 @@
-import {JSX} from 'solid-js';
+import {JSX, onMount, Show} from 'solid-js';
 
 const ProjectStatDetails: (props) => JSX.Element = (props) => {
+    onMount(() => {
+        props.createChart();
+    });
+
+
     return (
         <div>
             <h4 class="text-5xl font-semibold text-center text-gray-800 dark:text-gray-200">
                 Project details for {props.data[0].name}
             </h4>
             <p class="dark:text-white text-center py-4">
-                Here, you can see the progression of the unsafe usage within the project codebase, over time.
+                Here, you can see the progression of the unsafe usage within the project codebase,
+                over time, both as a chart and tabular data.
             </p>
+
+            <div class="py-10" id="chart_div"></div>
 
             <div class="flex flex-col">
                 <div class="overflow-x-auto sm:-mx-6 lg:-mx-8">
