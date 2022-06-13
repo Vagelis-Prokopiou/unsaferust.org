@@ -6,10 +6,12 @@ pub mod models;
 use crate::handlers::*;
 use actix_web::dev::Server;
 use actix_web::web::Data;
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, Handler, HttpServer, web};
 use actix_web::middleware::DefaultHeaders;
+use futures::FutureExt;
 use sqlx::PgPool;
 
+use actix_web::dev::Service;
 
 pub async fn redis_init() -> redis::aio::Connection {
     let redis_host = std::env::var("REDIS_HOST").expect("env::var REDIS_HOST failed");
@@ -17,6 +19,7 @@ pub async fn redis_init() -> redis::aio::Connection {
     let redis_connection: redis::aio::Connection = redis_client.get_async_connection().await.expect("Failed to get Redis connection");
     redis_connection
 }
+
 
 pub fn run(
     listener: std::net::TcpListener,
@@ -35,6 +38,29 @@ pub fn run(
             .max_age(3600);
 
         App::new()
+            .wrap_fn(|req, srv| {
+                //println!("Hi from start. You requested: {}", req.path());
+                let path = req.path().to_owned();
+                srv.call(req).map(move |res| {
+                    //println!("Hi from response: {:?}", &res);
+                    let serviceResponse = res.unwrap();
+                    //println!("error_response(): {:?}", &serviceResponse.response());
+                    if let Some(error) = serviceResponse.response().error() {
+                        log::error!("{}: {:?}", path.clone(), error);
+                    }
+
+                    //serviceResponse.
+                    // if let Some(error) = res.response().error() {
+                    //     log::error!("Error in response: {:?}", error);
+                    // }
+                    // if res.is_err() {
+                    //     log::error!("Error in response: {:?}", res)
+                    // }
+                    Ok(serviceResponse)
+                })
+            })
+
+
             .wrap(DefaultHeaders::new().add(("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")))
             .wrap(DefaultHeaders::new().add(("Content-Security-Policy", "default-src https:")))
             .wrap(DefaultHeaders::new().add(("X-XSS-Protection", "0")))

@@ -12,6 +12,9 @@ use unsaferust::models::configuration::DatabaseSettings;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    // Initialize a logger;
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("error"));
+
     // Prepare the variables that the run method needs.
     let server_port = std::env::var("SERVER_PORT").expect("env::var SERVER_PORT failed");
     let db_user = std::env::var("DB_USER").expect("env::var DB_USER failed");
