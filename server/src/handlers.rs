@@ -249,31 +249,31 @@ pub async fn providers_get_all(db: web::Data<PgPool>) -> Result<impl Responder, 
     return Ok(web::Json(providers));
 }
 
-pub async fn providers_get_by_id(db: web::Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+pub async fn providers_get_by_id(db: web::Data<PgPool>, id: web::Path<i32>) -> Result<impl Responder, actix_web::Error> {
     let providers: Vec<Provider> = sqlx::query_as("select * from providers where id = $1")
         .bind(*id)
         .fetch_all(db.as_ref())
         .await
-        .expect("Failed to fetch providers");
-    return web::Json(providers);
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    return Ok(web::Json(providers));
 }
 
-pub async fn projects_get_all(db: Data<PgPool>) -> impl Responder {
+pub async fn projects_get_all(db: Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
     let projects: Vec<Project> = sqlx::query_as("select * from projects")
         .fetch_all(db.as_ref())
         .await
-        .expect("Failed to fetch projects");
-    return web::Json(projects);
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    return Ok(web::Json(projects));
 }
 
-pub async fn projects_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+pub async fn projects_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> Result<impl Responder, actix_web::Error> {
     // Here we return all the entries for this specific project.
     let project_stats: Vec<Project> = sqlx::query_as("select * from projects where id = $1")
         .bind(*id)
         .fetch_all(db.as_ref())
         .await
-        .expect("Failed to fetch projects");
-    return web::Json(project_stats);
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    return Ok(web::Json(project_stats));
 }
 
 pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
@@ -290,8 +290,7 @@ pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_w
         let provider_url = format!("{}//{}", parts[0], parts[2]);
         let namespace = parts[3];
         let name = parts[4];
-        // Todo: Log the failure.
-        let _ = sqlx::query(&format!("
+        let _result = sqlx::query(&format!("
                 do
                 $do$
                 begin
@@ -307,7 +306,8 @@ pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_w
                 $do$
     "))
             .execute(db.as_ref())
-            .await;
+            .await
+            .map_err(actix_web::error::ErrorInternalServerError)?;
     }
 
     return Ok(HttpResponse::Ok());
