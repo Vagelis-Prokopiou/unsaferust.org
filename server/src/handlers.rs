@@ -240,12 +240,13 @@ limit {limit} offset ({limit} * {page});");
     return Ok(HttpResponse::Ok().body(json));
 }
 
-pub async fn providers_get_all(db: web::Data<PgPool>) -> impl Responder {
+pub async fn providers_get_all(db: web::Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
     let providers: Vec<Provider> = sqlx::query_as("select * from providers")
         .fetch_all(db.as_ref())
         .await
-        .expect("Failed to fetch providers");
-    return web::Json(providers);
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+
+    return Ok(web::Json(providers));
 }
 
 pub async fn providers_get_by_id(db: web::Data<PgPool>, id: web::Path<i32>) -> impl Responder {
