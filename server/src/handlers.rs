@@ -229,12 +229,14 @@ limit {limit} offset ({limit} * {page});");
 
     let json = serde_json::to_string(&result)
         .map_err(actix_web::error::ErrorInternalServerError)?;
+
     let _: String = redis
         .lock()
         .unwrap()
         .set(&redis_key, &json)
         .await
         .map_err(actix_web::error::ErrorInternalServerError)?;
+
     return Ok(HttpResponse::Ok().body(json));
 }
 
