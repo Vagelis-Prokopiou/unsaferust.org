@@ -131,7 +131,7 @@ pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responde
             Err(_) => { println!("/project-stats/update failed for project_id {project_id}") }
         }
     }
-    return Ok(HttpResponse::Ok());
+    return Ok(HttpResponse::Ok().finish());
 }
 
 pub async fn project_stats_get_by_id(
@@ -158,27 +158,11 @@ pub async fn project_stats_get_by_id(
     return Ok(web::Json(project_stats));
 }
 
-pub async fn project_stats_get_all___(
-    db: Data<PgPool>,
-    redis: Data<std::sync::Mutex<redis::aio::Connection>>,
-    pagination_options: web::Query<PaginationOptions>,
-)
-//-> actix_web::Result<actix_web::HttpResponse, actix_web::Error>
-    -> Result<actix_web::HttpResponse, actix_web::Error>
-
-{
-    return Err(actix_web::error::ErrorInternalServerError("Tupac error"));
-    // return HttpResponse::build(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR)
-    //     //.insert_header(ContentType::html())
-    //     .body("This is the error");
-}
-
 pub async fn project_stats_get_all(
     db: Data<PgPool>,
     redis: Data<std::sync::Mutex<redis::aio::Connection>>,
     pagination_options: web::Query<PaginationOptions>,
 ) -> Result<impl Responder, actix_web::Error> {
-    let handler_name = "project_stats_get_all";
     let page = pagination_options.page.unwrap_or(1) - 1;
     let limit = pagination_options.limit.unwrap_or(50);
     let name = match &pagination_options.name {
@@ -191,7 +175,7 @@ pub async fn project_stats_get_all(
 
     let name_filtering = { if name.is_empty() { "" } else { "and name ilike concat('%', $1, '%')" } };
     let query = format!("
-selecta t.project_id
+select t.project_id
      , t.name
      , t.url
      , t.code_lines
@@ -219,10 +203,7 @@ limit {limit} offset ({limit} * {page});");
         .bind(name)
         .fetch_all(db.as_ref())
         .await
-        .map_err(
-            //log::error!("{}: Context: Getting all stats from db / Original error: {}", handler_name, e);
-            actix_web::error::ErrorInternalServerError
-        )?;
+        .map_err(actix_web::error::ErrorInternalServerError)?;
 
     let project_stats: Vec<ProjectStatsDTO> = rows
         .iter()
@@ -246,8 +227,14 @@ limit {limit} offset ({limit} * {page});");
         "meta": { "total": total }
     });
 
-    let json = serde_json::to_string(&result).unwrap();
-    let _: String = redis.lock().unwrap().set(&redis_key, &json).await.unwrap();
+    let json = serde_json::to_string(&result)
+        .map_err(actix_web::error::ErrorInternalServerError)?;
+    let _: String = redis
+        .lock()
+        .unwrap()
+        .set(&redis_key, &json)
+        .await
+        .map_err(actix_web::error::ErrorInternalServerError)?;
     return Ok(HttpResponse::Ok().body(json));
 }
 
