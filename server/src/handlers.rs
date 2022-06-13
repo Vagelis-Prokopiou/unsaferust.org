@@ -158,11 +158,27 @@ pub async fn project_stats_get_by_id(
     return Ok(web::Json(project_stats));
 }
 
+pub async fn project_stats_get_all___(
+    db: Data<PgPool>,
+    redis: Data<std::sync::Mutex<redis::aio::Connection>>,
+    pagination_options: web::Query<PaginationOptions>,
+)
+//-> actix_web::Result<actix_web::HttpResponse, actix_web::Error>
+    -> Result<actix_web::HttpResponse, actix_web::Error>
+
+{
+    return Err(actix_web::error::ErrorInternalServerError("Tupac error"));
+    // return HttpResponse::build(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR)
+    //     //.insert_header(ContentType::html())
+    //     .body("This is the error");
+}
+
 pub async fn project_stats_get_all(
     db: Data<PgPool>,
     redis: Data<std::sync::Mutex<redis::aio::Connection>>,
     pagination_options: web::Query<PaginationOptions>,
 ) -> Result<impl Responder, actix_web::Error> {
+    let handler_name = "project_stats_get_all";
     let page = pagination_options.page.unwrap_or(1) - 1;
     let limit = pagination_options.limit.unwrap_or(50);
     let name = match &pagination_options.name {
@@ -175,7 +191,7 @@ pub async fn project_stats_get_all(
 
     let name_filtering = { if name.is_empty() { "" } else { "and name ilike concat('%', $1, '%')" } };
     let query = format!("
-select t.project_id
+selecta t.project_id
      , t.name
      , t.url
      , t.code_lines
@@ -203,7 +219,10 @@ limit {limit} offset ({limit} * {page});");
         .bind(name)
         .fetch_all(db.as_ref())
         .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(
+            //log::error!("{}: Context: Getting all stats from db / Original error: {}", handler_name, e);
+            actix_web::error::ErrorInternalServerError
+        )?;
 
     let project_stats: Vec<ProjectStatsDTO> = rows
         .iter()

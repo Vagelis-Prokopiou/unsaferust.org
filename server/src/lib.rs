@@ -6,7 +6,7 @@ pub mod models;
 use crate::handlers::*;
 use actix_web::dev::Server;
 use actix_web::web::Data;
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, Handler, HttpServer, web};
 use actix_web::middleware::DefaultHeaders;
 use futures::FutureExt;
 use sqlx::PgPool;
@@ -38,20 +38,29 @@ pub fn run(
             .max_age(3600);
 
         App::new()
-            // Register a middleware to log errors.
             .wrap_fn(|req, srv| {
+                //println!("Hi from start. You requested: {}", req.path());
                 let path = req.path().to_owned();
                 srv.call(req).map(move |res| {
                     //println!("Hi from response: {:?}", &res);
-                    let service_response = res.unwrap();
+                    let serviceResponse = res.unwrap();
                     //println!("error_response(): {:?}", &serviceResponse.response());
-                    // Todo: Write to error file.
-                    if let Some(error) = service_response.response().error() {
-                        log::error!("{}: {:?}", path, error);
+                    if let Some(error) = serviceResponse.response().error() {
+                        log::error!("{}: {:?}", path.clone(), error);
                     }
-                    Ok(service_response)
+
+                    //serviceResponse.
+                    // if let Some(error) = res.response().error() {
+                    //     log::error!("Error in response: {:?}", error);
+                    // }
+                    // if res.is_err() {
+                    //     log::error!("Error in response: {:?}", res)
+                    // }
+                    Ok(serviceResponse)
                 })
             })
+
+
             .wrap(DefaultHeaders::new().add(("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")))
             .wrap(DefaultHeaders::new().add(("Content-Security-Policy", "default-src https:")))
             .wrap(DefaultHeaders::new().add(("X-XSS-Protection", "0")))
