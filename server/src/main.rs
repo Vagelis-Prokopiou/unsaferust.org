@@ -7,17 +7,19 @@
 
 use std::io::BufRead;
 use std::net::TcpListener;
+// use futures::TryFutureExt;
 use sqlx::postgres::PgPoolOptions;
 use unsaferust::models::configuration::DatabaseSettings;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() {
     // Prepare the variables that the run method needs.
     let server_port = std::env::var("SERVER_PORT").expect("env::var SERVER_PORT failed");
     let db_user = std::env::var("DB_USER").expect("env::var DB_USER failed");
     let db_password = std::env::var("DB_PASSWORD").expect("env::var DB_PASSWORD failed");
     let db_host = std::env::var("DB_HOST").expect("env::var DB_HOST failed");
     let db_name = std::env::var("DB_NAME").expect("env::var DB_NAME failed");
+
     let db_port = std::env::var("DB_PORT")
         .unwrap_or_else(|_| "10".to_owned())
         .parse()
@@ -46,12 +48,15 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("migrations failed");
 
-
     // Todo: Delete when done =========================================================================
-    let file = std::fs::File::open("./data/providers.txt").expect("Failed to read providers.txt file");
+    let file =
+        std::fs::File::open("./data/providers.txt").expect("Failed to read providers.txt file");
     for url in std::io::BufReader::new(file).lines().flatten() {
-        if url.is_empty() { continue; }
-        sqlx::query(&format!("
+        if url.is_empty() {
+            continue;
+        }
+        sqlx::query(&format!(
+            "
                 do
                 $do$
                 begin
@@ -60,15 +65,19 @@ async fn main() -> std::io::Result<()> {
                 end if;
                 end
                 $do$
-    "))
-            .execute(&db)
-            .await
-            .expect("Failed to insert to providers");
+    "
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to insert to providers");
     }
     // Todo: Delete when done =========================================================================
 
     let address = format!("0.0.0.0:{}", server_port);
-    println!("Listening at: {}", &address);
     let listener = TcpListener::bind(&address).expect("TcpListener failed");
-    unsaferust::run(listener, db, unsaferust::redis_init().await)?.await
+    println!("Listening at: {}", &address);
+    unsaferust::run(listener, db, unsaferust::redis_init().await)
+        .expect("unsaferust::run failed")
+        .await
+        .expect("axum::Server failed");
 }

@@ -6,6 +6,9 @@ pub struct Provider {
 
 impl Provider {
     pub fn new(id: i32, url: &str) -> Self {
-        return Self { id, url: url.to_owned() };
+        return Self {
+            id,
+            url: url.to_owned(),
+        };
     }
 }

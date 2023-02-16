@@ -1,25 +1,31 @@
-version: "3.9"
+version: "3.8"
 
 services:
   redis:
     image: redis:7-alpine
     restart: ${RESTART_POLICY:-unless-stopped}
 
-  client:
-    build:
-      context: ./client
-      dockerfile: Dockerfile
+  db:
+    # The bullseye creates correct sorting compared to alpine.
+    image: postgres:14-bullseye
     ports:
-      - ${CLIENT_PORT:-3000}:${CLIENT_PORT:-3000}
-    volumes:
-      - ./client/src:/app/src
+      - ${DB_PORT:-5432}:${DB_PORT:-5432}
     env_file:
       - .env
-    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
-      - VITE_SERVER_URL=http://127.0.0.1:3001/api/v1
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    restart: ${RESTART_POLICY:-unless-stopped}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
-      - server
+      - redis
 
   server:
     build:
@@ -45,24 +51,25 @@ services:
       - DB_HOST=db
       - DB_NAME=${DB_NAME}
       - REDIS_HOST=redis
-    # Todo: Add health check
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
-  db:
-    # The bullseye creates correct sorting compared to alpine.
-    image: postgres:14-bullseye
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
     ports:
-      - ${DB_PORT:-5432}:${DB_PORT:-5432}
+      - ${CLIENT_PORT:-3000}:${CLIENT_PORT:-3000}
+    volumes:
+      - ./client/src:/app/src
     env_file:
       - .env
-    environment:
-      - POSTGRES_DB=${DB_NAME}
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
     restart: ${RESTART_POLICY:-unless-stopped}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    environment:
+      - VITE_SERVER_URL=http://127.0.0.1:3001/api/v1
+    depends_on:
+      - server
 
 volumes:
   pgdata:

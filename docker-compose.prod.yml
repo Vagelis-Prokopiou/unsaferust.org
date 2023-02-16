@@ -5,21 +5,27 @@ services:
     image: redis:7-alpine
     restart: ${RESTART_POLICY:-unless-stopped}
 
-  client:
-    volumes:
-      - ./etc/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
-    build:
-      context: ./client
-      dockerfile: Dockerfile.prod
-      args:
-        - VITE_SERVER_URL=https://unsaferust.org/api/v1
+  db:
+    # The bullseye creates correct sorting compared to alpine.
+    image: postgres:14-bullseye
     ports:
-      - ${CLIENT_PORT:-3000}:80
+      - ${DB_PORT:-5432}:${DB_PORT:-5432}
     env_file:
       - .env
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
     restart: ${RESTART_POLICY:-unless-stopped}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD", "pg_isready" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     depends_on:
-      - server
+      - redis
 
   server:
     build:
@@ -43,24 +49,25 @@ services:
       - DB_HOST=db
       - DB_NAME=${DB_NAME}
       - REDIS_HOST=redis
-    # Todo: Add health check
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
-  db:
-    # The bullseye creates correct sorting compared to alpine.
-    image: postgres:14-bullseye
+  client:
+    volumes:
+      - ./etc/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
+    build:
+      context: ./client
+      dockerfile: Dockerfile.prod
+      args:
+        - VITE_SERVER_URL=https://unsaferust.org/api/v1
     ports:
-      - ${DB_PORT:-5432}:${DB_PORT:-5432}
+      - ${CLIENT_PORT:-3000}:80
     env_file:
       - .env
-    environment:
-      - POSTGRES_DB=${DB_NAME}
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
     restart: ${RESTART_POLICY:-unless-stopped}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    depends_on:
+      - server
 
 volumes:
   pgdata:

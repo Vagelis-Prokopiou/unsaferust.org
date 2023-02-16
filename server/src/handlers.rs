@@ -1,40 +1,47 @@
-use std::io::BufRead;
-use std::sync::{Arc, Mutex};
+use crate::{
+    models::{
+        pagination::Pagination,
+        project::{Project, ProjectStats, ProjectStatsDTO, ProjectWithUrl},
+        provider::Provider,
+    },
+    AppState,
+};
+use anyhow::Context;
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    Json,
+};
 use futures::future;
-use tokio;
-use crate::models::pagination::PaginationOptions;
-use actix_web::web::{Data};
-use actix_web::{web, HttpResponse, Responder};
+use redis::{aio::Connection, AsyncCommands, RedisResult};
 use sqlx::{PgPool, Row};
-use crate::models::project::{Project, ProjectStats, ProjectStatsDTO, ProjectWithUrl};
-use crate::models::provider::Provider;
-use anyhow::{Context};
-use redis::{RedisResult};
-use redis::AsyncCommands;
+use std::{io::BufRead, ops::DerefMut, sync::Arc};
 
-pub async fn health_check() -> impl Responder { HttpResponse::Ok() }
-
-pub async fn index() -> impl Responder {
-    return HttpResponse::build(actix_web::http::StatusCode::PERMANENT_REDIRECT)
-        .append_header(("Location", "api/v1/projects"))
-        .finish();
+pub async fn health_check() -> StatusCode {
+    return StatusCode::OK;
 }
 
-pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
-    let projects: Vec<ProjectWithUrl> = sqlx::query_as("
+pub async fn project_stats_update(
+    State(appState): State<crate::AppState>,
+) -> Result<(), StatusCode> {
+    let projects: Vec<ProjectWithUrl> = sqlx::query_as(
+        "
             select
             projects.*
             , providers.url
             from projects
             inner join providers on providers.id = projects.provider_id
-         ")
-        .fetch_all(db.as_ref())
-        .await
-        .with_context(|| "Failed to get projects from db".to_string())
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+         ",
+    )
+    //.fetch_all(appState.postgress_db.clone().as_ref())
+    .fetch_all(appState.postgress_db.as_ref())
+    .await
+    .with_context(|| "Failed to get projects from db".to_string())
+    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Prepare a variable to store the updated projects.
-    let updated_projects: Arc<Mutex<Vec<ProjectStats>>> = Arc::new(Mutex::new(Vec::with_capacity(projects.len())));
+    let updated_projects: Arc<tokio::sync::Mutex<Vec<ProjectStats>>> =
+        Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(projects.len())));
 
     // Create the async tasks.
     let update_project_tasks: Vec<_> = projects
@@ -84,7 +91,7 @@ pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responde
 
                 updated_projects
                     .lock()
-                    .unwrap()
+                    .await
                     .push(ProjectStats::new(
                         project.id,
                         code_lines,
@@ -98,11 +105,12 @@ pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responde
     future::join_all(update_project_tasks).await;
 
     // Update the db.
-    for updated_project in updated_projects.lock().unwrap().iter() {
+    for updated_project in updated_projects.lock().await.iter() {
         let project_id = updated_project.project_id;
         let code_lines = updated_project.code_lines;
         let unsafe_lines = updated_project.unsafe_lines;
-        let query = format!("
+        let query = format!(
+            "
             DO
             $do$
                 BEGIN
@@ -123,21 +131,26 @@ pub async fn project_stats_update(db: web::Data<PgPool>) -> Result<impl Responde
                         VALUES ({project_id}, {code_lines}, {unsafe_lines});
                     end if;
                 END
-            $do$");
+            $do$"
+        );
         match sqlx::query(&query)
-            .execute(db.as_ref())
-            .await {
+            .execute(appState.postgress_db.as_ref())
+            .await
+        {
             Ok(_) => {}
-            Err(_) => { println!("/project-stats/update failed for project_id {project_id}") }
-        }
+            Err(_) => {
+                println!("/project-stats/update failed for project_id {project_id}")
+            }
+        };
     }
-    return Ok(HttpResponse::Ok());
+
+    return Ok(());
 }
 
 pub async fn project_stats_get_by_id(
-    db: Data<PgPool>,
-    id: web::Path<i32>,
-) -> Result<impl Responder, actix_web::Error> {
+    State(appState): State<crate::AppState>,
+    Path(id): Path<i32>,
+) -> Result<Json<Vec<ProjectStats>>, StatusCode> {
     // Here we return all the entries for this specific project.
     let project_stats: Vec<ProjectStats> = sqlx::query_as(
         "
@@ -149,32 +162,43 @@ pub async fn project_stats_get_by_id(
         ,COALESCE(cast(updated_at as text), '') as updated_at
         from project_stats
         where project_id = $1
-        order by created_at desc"
+        order by created_at desc",
     )
-        .bind(*id)
-        .fetch_all(db.as_ref())
-        .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-    return Ok(web::Json(project_stats));
+    .bind(id)
+    .fetch_all(appState.postgress_db.as_ref())
+    .await
+    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+    return Ok(Json(project_stats));
 }
 
 pub async fn project_stats_get_all(
-    db: Data<PgPool>,
-    redis: Data<std::sync::Mutex<redis::aio::Connection>>,
-    pagination_options: web::Query<PaginationOptions>,
-) -> Result<impl Responder, actix_web::Error> {
-    let page = pagination_options.page.unwrap_or(1) - 1;
-    let limit = pagination_options.limit.unwrap_or(50);
-    let name = match &pagination_options.name {
+    State(appState): State<AppState>,
+    pagination: Query<Pagination>,
+) -> Result<String, StatusCode> {
+    let page = pagination.page.unwrap_or(1) - 1;
+    let limit = pagination.limit.unwrap_or(50);
+    let name = match &pagination.name {
         Some(v) => v.as_ref(),
-        None => ""
+        None => "",
     };
     let redis_key = format!("{page}_{limit}_{name}");
-    let redis_value: RedisResult<String> = redis.lock().unwrap().get(&redis_key).await;
-    if redis_value.is_ok() { return Ok(HttpResponse::Ok().body(redis_value.unwrap())); }
+    let mut guard = appState.redis_db.lock().await;
+    let connection = guard.deref_mut();
+    let redis_result: RedisResult<String> = connection.get(&redis_key).await;
+    // Return the cached value if we have one.
+    if redis_result.is_ok() {
+        return Ok(redis_result.unwrap());
+    }
 
-    let name_filtering = { if name.is_empty() { "" } else { "and name ilike concat('%', $1, '%')" } };
-    let query = format!("
+    let name_filtering = {
+        if name.is_empty() {
+            ""
+        } else {
+            "and name ilike concat('%', $1, '%')"
+        }
+    };
+    let query = format!(
+        "
 select t.project_id
      , t.name
      , t.url
@@ -198,12 +222,13 @@ from (
      order by p.name) as t
 where t.rank_order = 1
 {name_filtering}
-limit {limit} offset ({limit} * {page});");
+limit {limit} offset ({limit} * {page});"
+    );
     let rows = sqlx::query(query.as_ref())
         .bind(name)
-        .fetch_all(db.as_ref())
+        .fetch_all(appState.postgress_db.as_ref())
         .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let project_stats: Vec<ProjectStatsDTO> = rows
         .iter()
@@ -221,57 +246,69 @@ limit {limit} offset ({limit} * {page});");
         .collect();
 
     // Todo: Add a type for this response.
-    let total: i64 = if rows.is_empty() { 0 } else { rows[0].get("total") };
+    let total: i64 = if rows.is_empty() {
+        0
+    } else {
+        rows[0].get("total")
+    };
     let result = serde_json::json!({
         "project_stats": project_stats,
         "meta": { "total": total }
     });
 
     let json = serde_json::to_string(&result).unwrap();
-    let _: String = redis.lock().unwrap().set(&redis_key, &json).await.unwrap();
-    return Ok(HttpResponse::Ok().body(json));
+    let _: String = connection.set(&redis_key, &json).await.unwrap();
+    return Ok(json);
 }
 
-pub async fn providers_get_all(db: web::Data<PgPool>) -> impl Responder {
+pub async fn providers_get_all(State(db): State<Arc<PgPool>>) -> Json<Vec<Provider>> {
     let providers: Vec<Provider> = sqlx::query_as("select * from providers")
         .fetch_all(db.as_ref())
         .await
         .expect("Failed to fetch providers");
-    return web::Json(providers);
+
+    return Json(providers);
 }
 
-pub async fn providers_get_by_id(db: web::Data<PgPool>, id: web::Path<i32>) -> impl Responder {
+pub async fn providers_get_by_id(
+    State(db): State<Arc<PgPool>>,
+    Path(id): Path<i32>,
+) -> Json<Vec<Provider>> {
     let providers: Vec<Provider> = sqlx::query_as("select * from providers where id = $1")
-        .bind(*id)
+        .bind(id)
         .fetch_all(db.as_ref())
         .await
         .expect("Failed to fetch providers");
-    return web::Json(providers);
+    return Json(providers);
 }
 
-pub async fn projects_get_all(db: Data<PgPool>) -> impl Responder {
+pub async fn projects_get_all(State(db): State<Arc<PgPool>>) -> Json<Vec<Project>> {
     let projects: Vec<Project> = sqlx::query_as("select * from projects")
         .fetch_all(db.as_ref())
         .await
         .expect("Failed to fetch projects");
-    return web::Json(projects);
+    return Json(projects);
 }
 
-pub async fn projects_get_by_id(db: Data<PgPool>, id: web::Path<i32>) -> impl Responder {
-    // Here we return all the entries for this specific project.
-    let project_stats: Vec<Project> = sqlx::query_as("select * from projects where id = $1")
-        .bind(*id)
+pub async fn projects_get_by_id(
+    State(db): State<Arc<PgPool>>,
+    Path(id): Path<i32>,
+) -> Json<Vec<Project>> {
+    let projects: Vec<Project> = sqlx::query_as("select * from projects where id = $1")
+        .bind(id)
         .fetch_all(db.as_ref())
         .await
         .expect("Failed to fetch projects");
-    return web::Json(project_stats);
+    return Json(projects);
 }
 
-pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_web::Error> {
+pub async fn projects_import(State(db): State<Arc<PgPool>>) -> Result<(), StatusCode> {
     let file = std::fs::File::open("./data/projects.txt")
-        .map_err(actix_web::error::ErrorInternalServerError)?;
+        .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
     for line in std::io::BufReader::new(file).lines().flatten() {
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         let parts: Vec<&str> = line.split('/').collect();
         if parts.len() != 5 {
             eprint!("Problem with line: {line}");
@@ -282,7 +319,8 @@ pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_w
         let namespace = parts[3];
         let name = parts[4];
         // Todo: Log the failure.
-        let _ = sqlx::query(&format!("
+        let _ = sqlx::query(&format!(
+            "
                 do
                 $do$
                 begin
@@ -296,24 +334,23 @@ pub async fn projects_import(db: Data<PgPool>) -> Result<impl Responder, actix_w
                 end if;
                 end
                 $do$
-    "))
-            .execute(db.as_ref())
-            .await;
+    "
+        ))
+        .execute(db.as_ref())
+        .await;
     }
 
-    return Ok(HttpResponse::Ok());
+    return Ok(());
 }
 
-pub async fn redis_flush(redis: Data<std::sync::Mutex<redis::aio::Connection>>) -> Result<impl Responder, actix_web::Error> {
-    let mut guard = redis.lock();
-    let connection = match guard.as_deref_mut() {
-        Ok(v) => v,
-        Err(_e) => return Err(actix_web::error::ErrorInternalServerError("/redis/purge: Failed to acquire connection to redis"))
-    };
-    // _result === OK
+pub async fn redis_flush(
+    State(redis): State<Arc<tokio::sync::Mutex<Connection>>>,
+) -> Result<StatusCode, StatusCode> {
+    let mut guard = redis.lock().await;
+    let connection = guard.deref_mut();
     let _result: String = redis::cmd("FLUSHDB")
         .query_async(connection)
         .await
-        .map_err(actix_web::error::ErrorInternalServerError)?;
-    return Ok(HttpResponse::Ok());
+        .map_err(|_e| /* Todo: Add logging */ StatusCode::INTERNAL_SERVER_ERROR)?;
+    return Ok(StatusCode::OK);
 }

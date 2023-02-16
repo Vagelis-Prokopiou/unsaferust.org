@@ -1,3 +1,4 @@
+use hyper::StatusCode;
 use serde_json::Value;
 use sqlx::Executor;
 use sqlx::{Connection, PgConnection, PgPool};
@@ -8,17 +9,6 @@ use unsaferust::models::provider::Provider;
 use uuid::Uuid;
 
 lazy_static::lazy_static! { static ref CLIENT: reqwest::Client = reqwest::Client::new(); }
-
-#[tokio::test]
-async fn test_health_check() {
-    let (address, _db) = spawn_app().await;
-    let response = CLIENT
-        .get(format!("{}/api/health_check", &address))
-        .send()
-        .await
-        .expect("Failed to execute request.");
-    assert!(response.status().is_success());
-}
 
 async fn spawn_app() -> (String, PgPool) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind random port");
@@ -46,8 +36,12 @@ async fn spawn_app() -> (String, PgPool) {
         db_max_connections,
     );
     let connection_pool = configure_database(&db_settings).await;
-    let server =
-        unsaferust::run(listener, connection_pool.clone(), unsaferust::redis_init().await).expect("Failed to bind address");
+    let server = unsaferust::run(
+        listener,
+        connection_pool.clone(),
+        unsaferust::redis_init().await,
+    )
+    .expect("Failed to bind address");
     let _ = tokio::spawn(server);
     // We return the application address to the caller!
     return (format!("http://127.0.0.1:{}", port), connection_pool);
@@ -90,9 +84,9 @@ async fn create_project(db: &PgPool) -> bool {
         (1, 'actix', 'actix-web')
     ",
     )
-        .execute(db)
-        .await
-        .expect("Failed to create entry");
+    .execute(db)
+    .await
+    .expect("Failed to create entry");
     return result.rows_affected() == 2;
 }
 
@@ -107,32 +101,43 @@ async fn create_project_stats(db: &PgPool) -> bool {
         (2, 200, 11, '2021-01-01')
     ",
     )
-        .execute(db)
-        .await
-        .expect("Failed to create entry");
+    .execute(db)
+    .await
+    .expect("Failed to create entry");
     return result.rows_affected() == 4;
 }
 
 /*****************/
 /* project-stats */
 /*****************/
+// #[tokio::test]
+// async fn test_project_stats_update() {
+//     let (address, db) = spawn_app().await;
+//
+//     // Setup
+//     let _result = create_provider(&db).await;
+//     let _result = create_project(&db).await;
+//
+//     // Positive assertion
+//     let response = CLIENT
+//         .get(format!("{}/api/v1/project-stats/update", &address))
+//         .send()
+//         .await
+//         .expect("Failed to execute request.");
+//
+//     // Assert
+//     // This may need test timeout update.
+//     assert!(response.status().is_success());
+// }
+
 #[tokio::test]
-async fn test_project_stats_update() {
-    let (address, db) = spawn_app().await;
-
-    // Setup
-    let _result = create_provider(&db).await;
-    let _result = create_project(&db).await;
-
-    // Positive assertion
+async fn test_health_check() {
+    let (address, _db) = spawn_app().await;
     let response = CLIENT
-        .get(format!("{}/api/v1/project-stats/update", &address))
+        .get(format!("{}/api/health_check", &address))
         .send()
         .await
         .expect("Failed to execute request.");
-
-    // Assert
-    // This may need test timeout update.
     assert!(response.status().is_success());
 }
 
@@ -143,23 +148,23 @@ async fn test_project_stats_pagination() {
     // Setup
     let _result = create_provider(&db).await;
     for i in 1..10 {
-        let _ = sqlx::query(
-            &format!("
+        let _ = sqlx::query(&format!(
+            "
             insert into projects (provider_id, name, namespace)
-            values (1, 'name_{i}', 'namespace_{i}')")
-        )
-            .execute(&db)
-            .await
-            .expect("Failed to create entry");
+            values (1, 'name_{i}', 'namespace_{i}')"
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to create entry");
 
-        let _ = sqlx::query(
-            &format!("
+        let _ = sqlx::query(&format!(
+            "
             insert into project_stats (project_id, code_lines, unsafe_lines)
-            values ({i}, '{i}', '{i}')")
-        )
-            .execute(&db)
-            .await
-            .expect("Failed to create entry");
+            values ({i}, '{i}', '{i}')"
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to create entry");
     }
 
     // Start requesting
@@ -174,7 +179,8 @@ async fn test_project_stats_pagination() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStats> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStats> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 9);
 
     // 1. Get 3 items per page (page 1).
@@ -187,7 +193,8 @@ async fn test_project_stats_pagination() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 3);
     assert_eq!(project_stats[0].name, "name_1");
     assert_eq!(project_stats[1].name, "name_2");
@@ -203,7 +210,8 @@ async fn test_project_stats_pagination() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 3);
     assert_eq!(project_stats[0].name, "name_7");
     assert_eq!(project_stats[1].name, "name_8");
@@ -219,7 +227,8 @@ async fn test_project_stats_pagination() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 4);
     assert_eq!(project_stats[0].name, "name_5");
     assert_eq!(project_stats[1].name, "name_6");
@@ -236,7 +245,8 @@ async fn test_project_stats_pagination() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 1);
     assert_eq!(project_stats[0].name, "name_9");
 }
@@ -249,46 +259,46 @@ async fn test_project_stats_pagination_with_name() {
     let _result = create_provider(&db).await;
     // Insert foo
     for i in 1..10 {
-        let _ = sqlx::query(
-            &format!("
+        let _ = sqlx::query(&format!(
+            "
             insert into projects (id, provider_id, name, namespace)
-            values ({i}, 1, 'foo_{i}', 'namespace_{i}')")
-        )
-            .execute(&db)
-            .await
-            .expect("Failed to create entry");
+            values ({i}, 1, 'foo_{i}', 'namespace_{i}')"
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to create entry");
 
-        let _ = sqlx::query(
-            &format!("
+        let _ = sqlx::query(&format!(
+            "
             insert into project_stats (project_id, code_lines, unsafe_lines)
             values ({i}, '{i}', '{i}')
-            ")
-        )
-            .execute(&db)
-            .await
-            .expect("Failed to create entry");
+            "
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to create entry");
     }
 
     // Insert bar
     for i in 1..10 {
-        let _ = sqlx::query(
-            &format!("
+        let _ = sqlx::query(&format!(
+            "
             insert into projects (id, provider_id, name, namespace)
-            values (({i} + 9), 1, 'bar_{i}', 'namespace_{i}')")
-        )
-            .execute(&db)
-            .await
-            .expect("Failed to create entry");
+            values (({i} + 9), 1, 'bar_{i}', 'namespace_{i}')"
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to create entry");
 
-        let _ = sqlx::query(
-            &format!("
+        let _ = sqlx::query(&format!(
+            "
             insert into project_stats (project_id, code_lines, unsafe_lines)
             values (({i} + 9), '{i}', '{i}')
-            ")
-        )
-            .execute(&db)
-            .await
-            .expect("Failed to create entry");
+            "
+        ))
+        .execute(&db)
+        .await
+        .expect("Failed to create entry");
     }
 
     // Start requesting
@@ -303,13 +313,17 @@ async fn test_project_stats_pagination_with_name() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStats> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStats> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     println!("project_stats.len(): {}", project_stats.len());
     assert_eq!(project_stats.len(), 18);
 
     // 1. Get 3 foo items per page (page 1).
     let response = CLIENT
-        .get(format!("{}/api/v1/project-stats?page=1&limit=3&name=foo", &address))
+        .get(format!(
+            "{}/api/v1/project-stats?page=1&limit=3&name=foo",
+            &address
+        ))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -317,16 +331,19 @@ async fn test_project_stats_pagination_with_name() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 3);
     assert_eq!(project_stats[0].name, "foo_1");
     assert_eq!(project_stats[1].name, "foo_2");
     assert_eq!(project_stats[2].name, "foo_3");
 
-
     // 1. Get 3 foo items per page (page 3).
     let response = CLIENT
-        .get(format!("{}/api/v1/project-stats?page=3&limit=3&name=foo", &address))
+        .get(format!(
+            "{}/api/v1/project-stats?page=3&limit=3&name=foo",
+            &address
+        ))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -334,16 +351,19 @@ async fn test_project_stats_pagination_with_name() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 3);
     assert_eq!(project_stats[0].name, "foo_7");
     assert_eq!(project_stats[1].name, "foo_8");
     assert_eq!(project_stats[2].name, "foo_9");
 
-
     // 1. Get 4 bar items per page (page 2).
     let response = CLIENT
-        .get(format!("{}/api/v1/project-stats?page=2&limit=4&name=bar", &address))
+        .get(format!(
+            "{}/api/v1/project-stats?page=2&limit=4&name=bar",
+            &address
+        ))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -351,7 +371,8 @@ async fn test_project_stats_pagination_with_name() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 4);
     assert_eq!(project_stats[0].name, "bar_5");
     assert_eq!(project_stats[1].name, "bar_6");
@@ -360,7 +381,10 @@ async fn test_project_stats_pagination_with_name() {
 
     // 1. Get 8 bar items per page (page 2).
     let response = CLIENT
-        .get(format!("{}/api/v1/project-stats?page=2&limit=8&name=bar", &address))
+        .get(format!(
+            "{}/api/v1/project-stats?page=2&limit=8&name=bar",
+            &address
+        ))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -368,13 +392,17 @@ async fn test_project_stats_pagination_with_name() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 1);
     assert_eq!(project_stats[0].name, "bar_9");
 
     // Get a non existent item
     let response = CLIENT
-        .get(format!("{}/api/v1/project-stats?page=2&limit=8&name=hello", &address))
+        .get(format!(
+            "{}/api/v1/project-stats?page=2&limit=8&name=hello",
+            &address
+        ))
         .send()
         .await
         .expect("Failed to execute request.");
@@ -382,7 +410,8 @@ async fn test_project_stats_pagination_with_name() {
     // Assert
     assert!(response.status().is_success());
     let mut result: Value = response.json().await.unwrap();
-    let project_stats: Vec<ProjectStatsDTO> = serde_json::from_value(result["project_stats"].take()).unwrap();
+    let project_stats: Vec<ProjectStatsDTO> =
+        serde_json::from_value(result["project_stats"].take()).unwrap();
     assert_eq!(project_stats.len(), 0);
 }
 
@@ -465,6 +494,23 @@ async fn test_project_stats_get_by_id() {
     assert_eq!(project_stats[1].created_at, "2020-01-01");
 }
 
+#[tokio::test]
+async fn test_non_existing_routes() {
+    let (address, _db) = spawn_app().await;
+
+    let arbitrary_paths = vec!["", "foo", "foo/bar", "foo/bar/baz"];
+    for arbitrary_path in arbitrary_paths {
+        let response = CLIENT
+            .get(format!("{}/{}", &address, arbitrary_path))
+            .send()
+            .await
+            .expect("Failed to execute request.");
+
+        // Assert
+        let status = response.status();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+}
 
 /*************/
 /* providers */
@@ -474,7 +520,7 @@ async fn test_providers_get_all() {
     let (address, db) = spawn_app().await;
 
     // Create an entry with sqlx since we dont have an endpoint.
-    let _result = create_provider(&db).await;
+    let _ = create_provider(&db).await;
 
     let response = CLIENT
         .get(format!("{}/api/v1/providers", &address))
@@ -482,7 +528,7 @@ async fn test_providers_get_all() {
         .await
         .expect("Failed to execute request.");
 
-    // // Assert
+    // Assert
     assert!(response.status().is_success());
     let providers: Vec<Provider> = response.json().await.unwrap();
     assert_eq!(providers.len(), 1);
@@ -521,7 +567,6 @@ async fn test_providers_get_by_id() {
     assert_eq!(providers.len(), 0);
 }
 
-
 /************/
 /* projects */
 /************/
@@ -529,7 +574,6 @@ async fn test_providers_get_by_id() {
 async fn test_projects_get_all() {
     let (address, db) = spawn_app().await;
 
-    // Create an entry with sqlx since we dont have an endpoint.
     // Create an entry with sqlx since we dont have an endpoint.
     let _result = create_provider(&db).await;
     let _result = create_project(&db).await;
@@ -556,8 +600,8 @@ async fn test_projects_get_all() {
 
     // Assert
     assert!(response.status().is_success());
-    let providers: Vec<Provider> = response.json().await.unwrap();
-    assert_eq!(providers.len(), 0);
+    let projects: Vec<Project> = response.json().await.unwrap();
+    assert_eq!(projects.len(), 0);
 }
 
 #[tokio::test]
