@@ -1,3 +1,5 @@
+use crate::models::{CodeLines, UnsafeLines};
+
 /// This is used to create new projects
 /// and also provide the project info to the clients.
 #[derive(Debug, serde::Deserialize, serde::Serialize, sqlx::FromRow)]
@@ -56,8 +58,8 @@ impl ProjectStatsDTO {
 #[derive(Debug, serde::Deserialize, serde::Serialize, sqlx::FromRow)]
 pub struct ProjectStats {
     pub(crate) project_id: i32,
-    pub(crate) code_lines: i32,
-    pub unsafe_lines: i32,
+    pub(crate) code_lines: CodeLines,
+    pub unsafe_lines: UnsafeLines,
     pub created_at: String,
     pub(crate) updated_at: String,
 }
@@ -65,8 +67,8 @@ pub struct ProjectStats {
 impl ProjectStats {
     pub fn new(
         project_id: i32,
-        code_lines: i32,
-        unsafe_lines: i32,
+        code_lines: CodeLines,
+        unsafe_lines: UnsafeLines,
         created_at: String,
         updated_at: String,
     ) -> Self {

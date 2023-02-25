@@ -14,6 +14,7 @@ use axum::{
 };
 use futures::future;
 use std::{io::BufRead, sync::Arc};
+use crate::models::{CodeLines, UnsafeLines};
 
 pub async fn healthCheck() -> StatusCode {
     return StatusCode::OK;
@@ -24,7 +25,7 @@ pub async fn updateProjectsStats(State(appState): State<AppState>) -> Result<(),
         appState.databaseService.getProjectsWithUrl().await?;
 
     // Prepare a variable to store the updated projects.
-    let updated_projects = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(
+    let updatedProjects = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(
         projectsWithUrl.len(),
     )));
 
@@ -32,7 +33,7 @@ pub async fn updateProjectsStats(State(appState): State<AppState>) -> Result<(),
     let update_project_tasks: Vec<_> = projectsWithUrl
         .into_iter()
         .map(|project| {
-            let updated_projects = updated_projects.clone();
+            let updated_projects = updatedProjects.clone();
             tokio::spawn(async move {
                 let project_dir = &project.name;
                 let project_url = format!("{}/{}/{}.git", project.url, project.namespace, project.name);
@@ -71,16 +72,16 @@ pub async fn updateProjectsStats(State(appState): State<AppState>) -> Result<(),
                     })
                     .collect();
                 assert_eq!(data.len(), 2, "The shell command did not resolve to 2 values (unsafe_lines:code_lines)");
-                let unsafe_lines = data[0];
-                let code_lines = data[1];
+                let unsafeLines = UnsafeLines::new(data[0]);
+                let codeLines = CodeLines::new(data[1]);
 
                 updated_projects
                     .lock()
                     .await
                     .push(ProjectStats::new(
                         project.id,
-                        code_lines,
-                        unsafe_lines,
+                        codeLines,
+                        unsafeLines,
                         "".to_owned(),
                         "".to_owned())
                     );
@@ -90,13 +91,17 @@ pub async fn updateProjectsStats(State(appState): State<AppState>) -> Result<(),
     future::join_all(update_project_tasks).await;
 
     // Update the services.
-    for updated_project in updated_projects.lock().await.iter() {
-        let project_id = updated_project.project_id;
-        let code_lines = updated_project.code_lines;
-        let unsafe_lines = updated_project.unsafe_lines;
+    for updatedProject in updatedProjects.lock().await.iter() {
+        let projectId = updatedProject.project_id;
+        let codeLines = updatedProject.code_lines;
+        let unsafeLines = updatedProject.unsafe_lines;
         appState
             .databaseService
-            .updateProjectStatsById(project_id, code_lines, unsafe_lines)
+            .updateProjectStatsById(
+                projectId,
+                codeLines,
+                unsafeLines,
+            )
             .await;
     }
 

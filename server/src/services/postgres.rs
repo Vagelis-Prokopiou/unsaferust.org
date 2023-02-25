@@ -1,4 +1,4 @@
-use crate::models::{configuration::DatabaseSettings, project::*, provider::Provider};
+use crate::models::{CodeLines, configuration::DatabaseSettings, project::*, provider::Provider, UnsafeLines};
 use axum::http::StatusCode;
 use sqlx::Row;
 use sqlx::{postgres::PgPoolOptions, Error, PgPool};
@@ -103,8 +103,8 @@ impl PostgresService {
             inner join providers on providers.id = projects.provider_id
          ",
         )
-        .fetch_all(&self.connection)
-        .await;
+            .fetch_all(&self.connection)
+            .await;
         if let Err(e) = result {
             let error = format!(
                 "DatabaseService::getProjectsWithUrl failed to retrieve data, with error: {:?}",
@@ -129,10 +129,10 @@ impl PostgresService {
         where project_id = $1
         order by created_at desc",
         )
-        .bind(id)
-        .fetch_all(&self.connection)
-        .await
-        .map_err(|e| format!("DatabaseService.getProjectsStats failed: {:?}", e))?;
+            .bind(id)
+            .fetch_all(&self.connection)
+            .await
+            .map_err(|e| format!("DatabaseService.getProjectsStats failed: {:?}", e))?;
         return Ok(projectStats);
     }
 
@@ -218,9 +218,11 @@ limit {limit} offset ({limit} * {page});"
     pub async fn updateProjectStatsById(
         &self,
         project_id: i32,
-        code_lines: i32,
-        unsafe_lines: i32,
+        code_lines: CodeLines,
+        unsafe_lines: UnsafeLines,
     ) {
+        let code_lines = code_lines.0;
+        let unsafe_lines = unsafe_lines.0;
         let query = format!(
             "
             DO
@@ -311,8 +313,8 @@ limit {limit} offset ({limit} * {page});"
                     $do$
         "
         ))
-        .execute(&self.connection)
-        .await;
+            .execute(&self.connection)
+            .await;
 
         if let Err(e) = result {
             let _ = self

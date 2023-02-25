@@ -1,9 +1,6 @@
 #![allow(non_snake_case)]
 
-// Todo: Add cascade on delete to projects.
 // Todo: Check why update is blocking. Comment the services stuff and check performance.
-// Todo: Use client caching too
-// Todo: Add most popular packages
 // Todo: Add structs for code_lines: i32 and unsafe_lines: i32.
 
 use std::io::BufRead;
