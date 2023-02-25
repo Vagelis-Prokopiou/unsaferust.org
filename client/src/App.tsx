@@ -26,7 +26,7 @@ const [projectStats] = createResource(
     async (projectId) => {
         if (projectId === 0) return [];
         const _ = await fetch(`${import.meta.env.VITE_SERVER_URL}/project-stats/${projectId}`);
-        const name = projectStatsList().project_stats.filter(item => item.project_id === projectId)[0].name;
+        const name = projectStatsList().projectStats.filter(item => item.project_id === projectId)[0].name;
         const data = (await _.json()).map(item => ({...item, name}));
         return data;
     });
@@ -42,7 +42,7 @@ const [projectStatsList] = createResource(
         const url = `${import.meta.env.VITE_SERVER_URL}/${uri}`;
         const _ = await fetch(url);
         const data = await _.json();
-        data.project_stats = data.project_stats.map(i => {
+        data.projectStats = data.projectStats.map(i => {
             const obj = {...i};
             const percentage = obj.unsafe_lines > 0 ? (obj.unsafe_lines / obj.code_lines) : 0;
             obj.percentage = `${percentage.toFixed(3)}%`;
@@ -56,7 +56,7 @@ const [projectStatsList] = createResource(
 /* ================== */
 const getNumberOfShownRecords = function () {
     const paginationOptions = getPaginationOptions();
-    return (paginationOptions.page - 1) * paginationOptions.limit + projectStatsList().project_stats.length;
+    return (paginationOptions.page - 1) * paginationOptions.limit + projectStatsList().projectStats.length;
 }
 
 /* ================== */
@@ -112,7 +112,7 @@ const App: () => JSX.Element = () => {
 
                     <Show when={getRoute() === ROUTE_LIST}>
                         <ProjectStatsList
-                            data={!projectStatsList.loading && projectStatsList().project_stats}
+                            data={!projectStatsList.loading && projectStatsList().projectStats}
                             total={!projectStatsList.loading && projectStatsList().meta.total}
                             navigate={(id) => {
                                 // Load the resource.
