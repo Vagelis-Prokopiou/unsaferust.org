@@ -7,6 +7,7 @@ mod utils;
 
 use crate::{
     handlers::*,
+    models::appState::AppState,
     services::{postgres::PostgresService, redis::RedisService},
 };
 use axum::{
@@ -17,13 +18,6 @@ use axum::{
 use hyper::{header::HeaderName, server::conn::AddrIncoming};
 use std::str::FromStr;
 use tower_http::cors::CorsLayer;
-
-#[derive(Clone)]
-pub struct AppState {
-    // Todo: Move this to models
-    redisService: RedisService,
-    databaseService: PostgresService,
-}
 
 pub fn run(
     listener: std::net::TcpListener,
