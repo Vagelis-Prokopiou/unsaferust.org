@@ -12,6 +12,8 @@ https://github.com/rayon-rs/rayon
 https://github.com/hyperium/hyper
 https://github.com/hyperium/tonic
 https://github.com/hyperium/mime
+https://github.com/hyperium/h2
+https://github.com/hyperium/http
 https://github.com/tokio-rs/tokio
 https://github.com/tokio-rs/axum
 https://github.com/ntex-rs/ntex

@@ -2,10 +2,7 @@ FROM rust:1-slim-bullseye AS chef
 
 WORKDIR /app
 
-RUN cargo install cargo-watch --locked \
-    && cargo install cargo-chef --locked \
-    && rustup component add clippy \
-    && apt-get update \
+RUN apt-get update \
     && apt-get install -y \
     git \
     grep \
@@ -13,6 +10,11 @@ RUN cargo install cargo-watch --locked \
     pkg-config \
     openssl \
     libssl-dev \
+    && cargo install cargo-watch --locked \
+    && cargo install cargo-chef --locked \
+    && cargo install sqlx-cli --no-default-features --features native-tls,postgres \
+    && rustup component add clippy \
+    && rustup component add rustfmt \
     && rm -rf /var/lib/apt/lists/*
 
 # This stage is common for both dev and prod.
@@ -27,4 +29,5 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 # Build application
 COPY . .
-CMD cargo watch --clear --quiet -x test -x clippy -x run
+#CMD cargo watch --clear --quiet -x clippy -x run
+CMD cargo watch --clear --quiet --ignore logs --exec test --exec clippy --exec run

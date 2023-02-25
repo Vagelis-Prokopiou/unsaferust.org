@@ -17,10 +17,10 @@ services:
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     restart: ${RESTART_POLICY:-unless-stopped}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+    #    volumes:
+    #      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "pg_isready"]
+      test: [ "CMD", "pg_isready" ]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -36,6 +36,7 @@ services:
     volumes:
       - ./server/src:/app/src
       - ./server/tests:/app/tests
+      - ./server/migrations:/app/migrations
       # This is for development
       - /tmp/rust_projects:/tmp/rust_projects
 
@@ -48,9 +49,11 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=${DB_PORT}
-      - DB_HOST=db
+      - DB_HOST=services
       - DB_NAME=${DB_NAME}
       - REDIS_HOST=redis
+      # This is for https://crates.io/crates/sqlx-cli
+      - DATABASE_URL=postgres://postgres@${DB_PORT}/${DB_NAME}
     depends_on:
       db:
         condition: service_healthy

@@ -1,17 +1,16 @@
 #![allow(clippy::needless_return, non_snake_case)]
 
+pub mod services;
 pub mod handlers;
 pub mod models;
 
-use crate::handlers::*;
-use axum::http::{HeaderValue, Method};
+use crate::{services::postgres::PostgresService, handlers::*};
 use axum::{
+    http::{HeaderValue, Method},
     routing::{get, IntoMakeService},
     Router,
 };
-use hyper::header::HeaderName;
-use hyper::server::conn::AddrIncoming;
-use sqlx::PgPool;
+use hyper::{header::HeaderName, server::conn::AddrIncoming};
 use std::str::FromStr;
 use tower_http::cors::CorsLayer;
 
@@ -19,33 +18,33 @@ use tower_http::cors::CorsLayer;
 pub struct AppState {
     // Todo: Move this to models
     redis_db: std::sync::Arc<tokio::sync::Mutex<redis::aio::Connection>>,
-    postgress_db: std::sync::Arc<PgPool>,
+    databaseService: PostgresService,
 }
 
 pub async fn redis_init() -> redis::aio::Connection {
-    let redis_host = std::env::var("REDIS_HOST").expect("env::var REDIS_HOST failed");
-    let redis_client = redis::Client::open(format!("redis://{redis_host}"))
-        .expect("Failed to create Redis client");
-    let redis_connection: redis::aio::Connection = redis_client
+    let redisHost = std::env::var("REDIS_HOST").expect("env::var REDIS_HOST failed");
+    let redisClient =
+        redis::Client::open(format!("redis://{redisHost}")).expect("Failed to create Redis client");
+    let redisConnection: redis::aio::Connection = redisClient
         .get_async_connection()
         .await
         .expect("Failed to get Redis connection");
-    return redis_connection;
+    return redisConnection;
 }
 
 pub fn run(
     listener: std::net::TcpListener,
-    db: PgPool,
-    redis_connection: redis::aio::Connection,
+    redisConnection: redis::aio::Connection,
+    databaseService: PostgresService,
 ) -> Result<hyper::server::Server<AddrIncoming, IntoMakeService<Router>>, std::io::Error> {
-    let redis_db = std::sync::Arc::new(tokio::sync::Mutex::new(redis_connection));
-    let postgress_db = std::sync::Arc::new(db);
+    let redisDb = std::sync::Arc::new(tokio::sync::Mutex::new(redisConnection));
+
     let appState = AppState {
-        redis_db: redis_db.clone(),
-        postgress_db: postgress_db.clone(),
+        redis_db: redisDb.clone(),
+        databaseService,
     };
 
-    let cors_origins = [
+    let corsOrigins = [
         "http://localhost:3000".parse().unwrap(),
         "http://127.0.0.1:3000".parse().unwrap(),
         "https://unsaferust.org".parse().unwrap(),
@@ -53,45 +52,43 @@ pub fn run(
     ];
     let cors = CorsLayer::new()
         .allow_methods([Method::GET])
-        .allow_origin(cors_origins)
+        .allow_origin(corsOrigins)
         .max_age(std::time::Duration::from_secs(60) * 60);
 
     // Routes
-    let provider_routes = Router::new()
-        .route("/:id", get(providers_get_by_id))
-        .route("/", get(providers_get_all))
-        .with_state(postgress_db.clone());
-    let provider_routes_namespace = Router::new().nest("/providers", provider_routes);
+    let providerRoutes = Router::new()
+        .route("/:id", get(getProviderById))
+        .route("/", get(getProviders))
+        .with_state(appState.clone());
+    let providerRoutesNamespace = Router::new().nest("/providers", providerRoutes);
 
-    let project_routes = Router::new()
-        .route("/import", get(projects_import))
-        .route("/:id", get(projects_get_by_id))
-        .route("/", get(projects_get_all))
-        .with_state(postgress_db);
-    let project_routes_namespace = Router::new().nest("/projects", project_routes);
+    let projectRoutes = Router::new()
+        .route("/import", get(projectsImport))
+        .route("/:id", get(getProjectById))
+        .route("/", get(getProjects))
+        .with_state(appState.clone());
+    let projectRoutesNamespace = Router::new().nest("/projects", projectRoutes);
 
-    let project_stats_routes: Router<()> = Router::new()
-        .route("/update", get(project_stats_update))
-        .route("/:id", get(project_stats_get_by_id))
-        .route("/", get(project_stats_get_all))
+    let projectStatsRoutes: Router<()> = Router::new()
+        .route("/update", get(updateProjectsStats))
+        .route("/:id", get(getProjectStatsById))
+        .route("/", get(getProjectsStats))
         .with_state(appState);
-
-    let project_stats_namespace = Router::new().nest("/project-stats", project_stats_routes);
-
-    let api_v1_namespace = Router::new().nest(
+    let projectStatsNamespace = Router::new().nest("/project-stats", projectStatsRoutes);
+    let apiV1Namespace = Router::new().nest(
         "/v1",
-        provider_routes_namespace
-            .merge(project_routes_namespace)
-            .merge(project_stats_namespace),
+        providerRoutesNamespace
+            .merge(projectRoutesNamespace)
+            .merge(projectStatsNamespace),
     );
 
-    let api_namespace_routes = axum::routing::Router::new()
-        .route("/health_check", get(health_check))
-        .route("/redis/flush", get(redis_flush))
-        .with_state(redis_db);
-    let api_namespace = Router::new().nest("/api", api_namespace_routes.merge(api_v1_namespace));
+    let apiNamespaceRoutes = axum::routing::Router::new()
+        .route("/health_check", get(healthCheck))
+        .route("/redis/flush", get(redisFlush))
+        .with_state(redisDb);
+    let apiNamespace = Router::new().nest("/api", apiNamespaceRoutes.merge(apiV1Namespace));
     let app = Router::new()
-        .merge(api_namespace)
+        .merge(apiNamespace)
         .layer(cors)
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             HeaderName::from_str("X-Content-Type-Options").unwrap(),
@@ -139,7 +136,6 @@ pub fn run(
                 HeaderValue::from_str("text/html; charset=UTF-8").unwrap(),
             ),
         );
-    //         .wrap(DefaultHeaders::new().add(("Access-Control-Allow-Origin", "https://unsaferust.org")))
 
     let server = axum::Server::from_tcp(listener)
         .expect("axum::Server::from_tcp failed")

@@ -1,12 +1,12 @@
+use crate::models::project::ProjectStatsWithMeta;
 use crate::{
     models::{
         pagination::Pagination,
-        project::{Project, ProjectStats, ProjectStatsDTO, ProjectWithUrl},
+        project::{Project, ProjectStats, ProjectWithUrl},
         provider::Provider,
     },
     AppState,
 };
-use anyhow::Context;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
@@ -14,37 +14,23 @@ use axum::{
 };
 use futures::future;
 use redis::{aio::Connection, AsyncCommands, RedisResult};
-use sqlx::{PgPool, Row};
 use std::{io::BufRead, ops::DerefMut, sync::Arc};
 
-pub async fn health_check() -> StatusCode {
+pub async fn healthCheck() -> StatusCode {
     return StatusCode::OK;
 }
 
-pub async fn project_stats_update(
-    State(appState): State<crate::AppState>,
-) -> Result<(), StatusCode> {
-    let projects: Vec<ProjectWithUrl> = sqlx::query_as(
-        "
-            select
-            projects.*
-            , providers.url
-            from projects
-            inner join providers on providers.id = projects.provider_id
-         ",
-    )
-    //.fetch_all(appState.postgress_db.clone().as_ref())
-    .fetch_all(appState.postgress_db.as_ref())
-    .await
-    .with_context(|| "Failed to get projects from db".to_string())
-    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
+pub async fn updateProjectsStats(State(appState): State<AppState>) -> Result<(), StatusCode> {
+    let projectsWithUrl: Vec<ProjectWithUrl> =
+        appState.databaseService.getProjectsWithUrl().await?;
 
     // Prepare a variable to store the updated projects.
-    let updated_projects: Arc<tokio::sync::Mutex<Vec<ProjectStats>>> =
-        Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(projects.len())));
+    let updated_projects = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(
+        projectsWithUrl.len(),
+    )));
 
     // Create the async tasks.
-    let update_project_tasks: Vec<_> = projects
+    let update_project_tasks: Vec<_> = projectsWithUrl
         .into_iter()
         .map(|project| {
             let updated_projects = updated_projects.clone();
@@ -104,74 +90,36 @@ pub async fn project_stats_update(
         .collect();
     future::join_all(update_project_tasks).await;
 
-    // Update the db.
+    // Update the services.
     for updated_project in updated_projects.lock().await.iter() {
         let project_id = updated_project.project_id;
         let code_lines = updated_project.code_lines;
         let unsafe_lines = updated_project.unsafe_lines;
-        let query = format!(
-            "
-            DO
-            $do$
-                BEGIN
-                    if exists(
-                                select project_id
-                                from project_stats
-                                where project_id = {project_id}
-                                and unsafe_lines = {unsafe_lines}
-                              )
-                    then
-                        update project_stats
-                        set updated_at = current_date,
-                        code_lines = {code_lines}
-                        where project_id = {project_id}
-                        and unsafe_lines = {unsafe_lines};
-                    else
-                        insert into project_stats (project_id, code_lines, unsafe_lines)
-                        VALUES ({project_id}, {code_lines}, {unsafe_lines});
-                    end if;
-                END
-            $do$"
-        );
-        match sqlx::query(&query)
-            .execute(appState.postgress_db.as_ref())
-            .await
-        {
-            Ok(_) => {}
-            Err(_) => {
-                println!("/project-stats/update failed for project_id {project_id}")
-            }
-        };
+        appState
+            .databaseService
+            .updateProjectStatsById(project_id, code_lines, unsafe_lines)
+            .await;
     }
 
     return Ok(());
 }
 
-pub async fn project_stats_get_by_id(
-    State(appState): State<crate::AppState>,
+pub async fn getProjectStatsById(
+    State(appState): State<AppState>,
     Path(id): Path<i32>,
 ) -> Result<Json<Vec<ProjectStats>>, StatusCode> {
-    // Here we return all the entries for this specific project.
-    let project_stats: Vec<ProjectStats> = sqlx::query_as(
-        "
-        select
-        project_id
-        ,code_lines
-        ,unsafe_lines
-        ,COALESCE(cast(created_at as text), '') as created_at
-        ,COALESCE(cast(updated_at as text), '') as updated_at
-        from project_stats
-        where project_id = $1
-        order by created_at desc",
-    )
-    .bind(id)
-    .fetch_all(appState.postgress_db.as_ref())
-    .await
-    .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
-    return Ok(Json(project_stats));
+    let result = appState.databaseService.getProjectsStatsById(id).await;
+    if let Err(e) = result {
+        let _ = appState
+            .databaseService
+            .logError(&format!("projectStatsGetById: {e}"))
+            .await;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    return Ok(Json(result.unwrap()));
 }
 
-pub async fn project_stats_get_all(
+pub async fn getProjectsStats(
     State(appState): State<AppState>,
     pagination: Query<Pagination>,
 ) -> Result<String, StatusCode> {
@@ -189,7 +137,6 @@ pub async fn project_stats_get_all(
     if redis_result.is_ok() {
         return Ok(redis_result.unwrap());
     }
-
     let name_filtering = {
         if name.is_empty() {
             ""
@@ -197,112 +144,83 @@ pub async fn project_stats_get_all(
             "and name ilike concat('%', $1, '%')"
         }
     };
-    let query = format!(
-        "
-select t.project_id
-     , t.name
-     , t.url
-     , t.code_lines
-     , t.unsafe_lines
-     , t.created_at
-     , t.updated_at
-     , COUNT(project_id) OVER () as total
-from (
-     select RANK() OVER (partition by ps.project_id ORDER BY ps.created_at desc) as rank_order
-          , ps.project_id
-          , p.name
-          , concat(providers.url, '/', p.namespace, '/', p.name)                 as url
-          , ps.code_lines
-          , ps.unsafe_lines
-          , COALESCE(cast(ps.created_at as text), '')                            as created_at
-          , COALESCE(cast(ps.updated_at as text), '')                            as updated_at
-     from project_stats as ps
-     inner join projects as p on p.id = ps.project_id
-     inner join providers on providers.id = p.provider_id
-     order by p.name) as t
-where t.rank_order = 1
-{name_filtering}
-limit {limit} offset ({limit} * {page});"
-    );
-    let rows = sqlx::query(query.as_ref())
-        .bind(name)
-        .fetch_all(appState.postgress_db.as_ref())
-        .await
-        .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let project_stats: Vec<ProjectStatsDTO> = rows
-        .iter()
-        .map(|row| {
-            return ProjectStatsDTO::new(
-                row.get("project_id"),
-                row.get("name"),
-                row.get("url"),
-                row.get("code_lines"),
-                row.get("unsafe_lines"),
-                row.get("created_at"),
-                row.get("updated_at"),
-            );
-        })
-        .collect();
-
-    // Todo: Add a type for this response.
-    let total: i64 = if rows.is_empty() {
-        0
-    } else {
-        rows[0].get("total")
-    };
-    let result = serde_json::json!({
-        "project_stats": project_stats,
-        "meta": { "total": total }
-    });
-
+    let result: ProjectStatsWithMeta = appState
+        .databaseService
+        .getProjectsStats(name, name_filtering, limit, page)
+        .await?;
     let json = serde_json::to_string(&result).unwrap();
-    let _: String = connection.set(&redis_key, &json).await.unwrap();
+    let redisResult: RedisResult<String> = connection.set(&redis_key, &json).await;
+    if let Err(e) = redisResult {
+        let _ = appState
+            .databaseService
+            .logError(&format!(
+                "Handlers::getProjectsStats() failed to save ro Redis: {:?}",
+                e
+            ))
+            .await;
+    };
     return Ok(json);
 }
 
-pub async fn providers_get_all(State(db): State<Arc<PgPool>>) -> Json<Vec<Provider>> {
-    let providers: Vec<Provider> = sqlx::query_as("select * from providers")
-        .fetch_all(db.as_ref())
-        .await
-        .expect("Failed to fetch providers");
-
-    return Json(providers);
+pub async fn getProviders(
+    State(appState): State<AppState>,
+) -> Result<Json<Vec<Provider>>, StatusCode> {
+    let result = appState.databaseService.getProviders().await;
+    if let Err(e) = result {
+        let _ = appState
+            .databaseService
+            .logError(&format!("providers_get_all: {e}"))
+            .await;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    return Ok(Json(result.unwrap()));
 }
 
-pub async fn providers_get_by_id(
-    State(db): State<Arc<PgPool>>,
+pub async fn getProviderById(
+    State(appState): State<AppState>,
     Path(id): Path<i32>,
-) -> Json<Vec<Provider>> {
-    let providers: Vec<Provider> = sqlx::query_as("select * from providers where id = $1")
-        .bind(id)
-        .fetch_all(db.as_ref())
-        .await
-        .expect("Failed to fetch providers");
-    return Json(providers);
+) -> Result<Json<Vec<Provider>>, StatusCode> {
+    let result = appState.databaseService.getProviderById(id).await;
+    if let Err(e) = result {
+        let _ = appState
+            .databaseService
+            .logError(&format!("providers_get_by_id: {e}"))
+            .await;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    return Ok(Json(result.unwrap()));
 }
 
-pub async fn projects_get_all(State(db): State<Arc<PgPool>>) -> Json<Vec<Project>> {
-    let projects: Vec<Project> = sqlx::query_as("select * from projects")
-        .fetch_all(db.as_ref())
-        .await
-        .expect("Failed to fetch projects");
-    return Json(projects);
+pub async fn getProjects(
+    State(appState): State<AppState>,
+) -> Result<Json<Vec<Project>>, StatusCode> {
+    let result = appState.databaseService.getProjects().await;
+    if let Err(e) = result {
+        let _ = appState
+            .databaseService
+            .logError(&format!("projects_get_all: {e}"))
+            .await;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    return Ok(Json(result.unwrap()));
 }
 
-pub async fn projects_get_by_id(
-    State(db): State<Arc<PgPool>>,
+pub async fn getProjectById(
+    State(appState): State<AppState>,
     Path(id): Path<i32>,
-) -> Json<Vec<Project>> {
-    let projects: Vec<Project> = sqlx::query_as("select * from projects where id = $1")
-        .bind(id)
-        .fetch_all(db.as_ref())
-        .await
-        .expect("Failed to fetch projects");
-    return Json(projects);
+) -> Result<Json<Vec<Project>>, StatusCode> {
+    let result = appState.databaseService.getProjectById(id).await;
+    if let Err(e) = result {
+        let _ = appState
+            .databaseService
+            .logError(&format!("projects_get_all: {e}"))
+            .await;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    return Ok(Json(result.unwrap()));
 }
 
-pub async fn projects_import(State(db): State<Arc<PgPool>>) -> Result<(), StatusCode> {
+pub async fn projectsImport(State(appState): State<AppState>) -> Result<(), StatusCode> {
     let file = std::fs::File::open("./data/projects.txt")
         .map_err(|_e| StatusCode::INTERNAL_SERVER_ERROR)?;
     for line in std::io::BufReader::new(file).lines().flatten() {
@@ -318,32 +236,16 @@ pub async fn projects_import(State(db): State<Arc<PgPool>>) -> Result<(), Status
         let provider_url = format!("{}//{}", parts[0], parts[2]);
         let namespace = parts[3];
         let name = parts[4];
-        // Todo: Log the failure.
-        let _ = sqlx::query(&format!(
-            "
-                do
-                $do$
-                begin
-                if not exists (select id from projects where name = '{name}') then
-                    insert into projects (provider_id, namespace, name)
-                     VALUES (
-                     (select id from providers where url = '{provider_url}'),
-                     '{namespace}',
-                     '{name}'
-                     );
-                end if;
-                end
-                $do$
-    "
-        ))
-        .execute(db.as_ref())
-        .await;
+        appState
+            .databaseService
+            .createProject(&provider_url, namespace, name)
+            .await?;
     }
 
     return Ok(());
 }
 
-pub async fn redis_flush(
+pub async fn redisFlush(
     State(redis): State<Arc<tokio::sync::Mutex<Connection>>>,
 ) -> Result<StatusCode, StatusCode> {
     let mut guard = redis.lock().await;

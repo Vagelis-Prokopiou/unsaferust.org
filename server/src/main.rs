@@ -1,50 +1,26 @@
+#![allow(non_snake_case)]
+
 // Todo: Add cascade on delete to projects.
-// Todo: Add error handling
-// Todo: Add logging
-// Todo: Check why update is blocking. Comment the db stuff and check performance.
+// Todo: Check why update is blocking. Comment the services stuff and check performance.
 // Todo: Use client caching too
 // Todo: Add most popular packages
+// Todo: Add structs for code_lines: i32 and unsafe_lines: i32.
 
 use std::io::BufRead;
 use std::net::TcpListener;
-// use futures::TryFutureExt;
-use sqlx::postgres::PgPoolOptions;
-use unsaferust::models::configuration::DatabaseSettings;
+use unsaferust::{services::postgres::PostgresService};
+use unsaferust::services::redis::RedisService;
 
 #[tokio::main]
 async fn main() {
     // Prepare the variables that the run method needs.
-    let server_port = std::env::var("SERVER_PORT").expect("env::var SERVER_PORT failed");
-    let db_user = std::env::var("DB_USER").expect("env::var DB_USER failed");
-    let db_password = std::env::var("DB_PASSWORD").expect("env::var DB_PASSWORD failed");
-    let db_host = std::env::var("DB_HOST").expect("env::var DB_HOST failed");
-    let db_name = std::env::var("DB_NAME").expect("env::var DB_NAME failed");
-
-    let db_port = std::env::var("DB_PORT")
-        .unwrap_or_else(|_| "10".to_owned())
-        .parse()
-        .expect("Failed to parse DB_PORT");
-    let db_max_connections = std::env::var("DB_MAX_CONNECTIONS")
-        .unwrap_or_else(|_| "10".to_owned())
-        .parse()
-        .expect("Failed to parse DB_MAX_CONNECTIONS");
-    let db_settings = DatabaseSettings::new(
-        db_user,
-        db_password,
-        db_port,
-        db_host,
-        db_name,
-        db_max_connections,
-    );
-    let db = PgPoolOptions::new()
-        .max_connections(db_max_connections)
-        .connect(&db_settings.get_connection_string_with_db())
-        .await
-        .expect("PgPoolOptions initialization failed");
+    let serverPort = std::env::var("SERVER_PORT").expect("env::var SERVER_PORT failed");
+    let databaseService = PostgresService::new(None).await;
+    let _redisService = RedisService::new().await;
 
     // Execute the migrations.
     sqlx::migrate!("./migrations")
-        .run(&db)
+        .run(&databaseService.connection)
         .await
         .expect("migrations failed");
 
@@ -67,16 +43,44 @@ async fn main() {
                 $do$
     "
         ))
-        .execute(&db)
-        .await
-        .expect("Failed to insert to providers");
+            .execute(&databaseService.connection)
+            .await
+            .expect("Failed to insert to providers");
+    }
+
+    let file =
+        std::fs::File::open("./data/projects.txt").expect("Failed to read projects.txt file");
+    for project in std::io::BufReader::new(file).lines().flatten() {
+        if project.is_empty() {
+            continue;
+        }
+        let project = project.replace("https://", "");
+        let parts: Vec<&str> = project.split('/').collect();
+        let namespace = parts[1];
+        let name = parts[2];
+        println!("parts: {:?}", parts);
+        sqlx::query(&format!(
+            "
+                    do
+                    $do$
+                    begin
+                    if not exists (select id from projects where namespace = '{namespace}' and name = '{name}') then
+                        insert into projects (provider_id, namespace, name) VALUES ('1', '{namespace}', '{name}');
+                    end if;
+                    end
+                    $do$
+        "
+        ))
+            .execute(&databaseService.connection)
+            .await
+            .expect("Failed to insert to providers");
     }
     // Todo: Delete when done =========================================================================
 
-    let address = format!("0.0.0.0:{}", server_port);
+    let address = format!("0.0.0.0:{}", serverPort);
     let listener = TcpListener::bind(&address).expect("TcpListener failed");
     println!("Listening at: {}", &address);
-    unsaferust::run(listener, db, unsaferust::redis_init().await)
+    unsaferust::run(listener, unsaferust::redis_init().await, databaseService)
         .expect("unsaferust::run failed")
         .await
         .expect("axum::Server failed");

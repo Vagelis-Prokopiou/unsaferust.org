@@ -79,3 +79,9 @@ impl ProjectStats {
         };
     }
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct ProjectStatsWithMeta {
+    pub projectStats: Vec<ProjectStatsDTO>,
+    pub meta: i64,
+}
