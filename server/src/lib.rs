@@ -1,10 +1,14 @@
 #![allow(clippy::needless_return, non_snake_case)]
 
-pub mod services;
 pub mod handlers;
 pub mod models;
+pub mod services;
+mod utils;
 
-use crate::{services::postgres::PostgresService, handlers::*};
+use crate::{
+    handlers::*,
+    services::{postgres::PostgresService, redis::RedisService},
+};
 use axum::{
     http::{HeaderValue, Method},
     routing::{get, IntoMakeService},
@@ -17,30 +21,17 @@ use tower_http::cors::CorsLayer;
 #[derive(Clone)]
 pub struct AppState {
     // Todo: Move this to models
-    redis_db: std::sync::Arc<tokio::sync::Mutex<redis::aio::Connection>>,
+    redisService: RedisService,
     databaseService: PostgresService,
-}
-
-pub async fn redis_init() -> redis::aio::Connection {
-    let redisHost = std::env::var("REDIS_HOST").expect("env::var REDIS_HOST failed");
-    let redisClient =
-        redis::Client::open(format!("redis://{redisHost}")).expect("Failed to create Redis client");
-    let redisConnection: redis::aio::Connection = redisClient
-        .get_async_connection()
-        .await
-        .expect("Failed to get Redis connection");
-    return redisConnection;
 }
 
 pub fn run(
     listener: std::net::TcpListener,
-    redisConnection: redis::aio::Connection,
+    redisService: RedisService,
     databaseService: PostgresService,
 ) -> Result<hyper::server::Server<AddrIncoming, IntoMakeService<Router>>, std::io::Error> {
-    let redisDb = std::sync::Arc::new(tokio::sync::Mutex::new(redisConnection));
-
     let appState = AppState {
-        redis_db: redisDb.clone(),
+        redisService,
         databaseService,
     };
 
@@ -73,7 +64,7 @@ pub fn run(
         .route("/update", get(updateProjectsStats))
         .route("/:id", get(getProjectStatsById))
         .route("/", get(getProjectsStats))
-        .with_state(appState);
+        .with_state(appState.clone());
     let projectStatsNamespace = Router::new().nest("/project-stats", projectStatsRoutes);
     let apiV1Namespace = Router::new().nest(
         "/v1",
@@ -85,7 +76,7 @@ pub fn run(
     let apiNamespaceRoutes = axum::routing::Router::new()
         .route("/health_check", get(healthCheck))
         .route("/redis/flush", get(redisFlush))
-        .with_state(redisDb);
+        .with_state(appState);
     let apiNamespace = Router::new().nest("/api", apiNamespaceRoutes.merge(apiV1Namespace));
     let app = Router::new()
         .merge(apiNamespace)

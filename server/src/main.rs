@@ -8,7 +8,7 @@
 
 use std::io::BufRead;
 use std::net::TcpListener;
-use unsaferust::{services::postgres::PostgresService};
+use unsaferust::services::postgres::PostgresService;
 use unsaferust::services::redis::RedisService;
 
 #[tokio::main]
@@ -16,7 +16,7 @@ async fn main() {
     // Prepare the variables that the run method needs.
     let serverPort = std::env::var("SERVER_PORT").expect("env::var SERVER_PORT failed");
     let databaseService = PostgresService::new(None).await;
-    let _redisService = RedisService::new().await;
+    let redisService = RedisService::new().await;
 
     // Execute the migrations.
     sqlx::migrate!("./migrations")
@@ -43,9 +43,9 @@ async fn main() {
                 $do$
     "
         ))
-            .execute(&databaseService.connection)
-            .await
-            .expect("Failed to insert to providers");
+        .execute(&databaseService.connection)
+        .await
+        .expect("Failed to insert to providers");
     }
 
     let file =
@@ -80,7 +80,7 @@ async fn main() {
     let address = format!("0.0.0.0:{}", serverPort);
     let listener = TcpListener::bind(&address).expect("TcpListener failed");
     println!("Listening at: {}", &address);
-    unsaferust::run(listener, unsaferust::redis_init().await, databaseService)
+    unsaferust::run(listener, redisService, databaseService)
         .expect("unsaferust::run failed")
         .await
         .expect("axum::Server failed");

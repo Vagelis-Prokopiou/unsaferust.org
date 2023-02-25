@@ -5,7 +5,7 @@ services:
     image: redis:7-alpine
     restart: ${RESTART_POLICY:-unless-stopped}
 
-  db:
+  database:
     # The bullseye creates correct sorting compared to alpine.
     image: postgres:14-bullseye
     ports:
@@ -46,11 +46,11 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_PORT=${DB_PORT}
-      - DB_HOST=services
+      - DB_HOST=database
       - DB_NAME=${DB_NAME}
       - REDIS_HOST=redis
     depends_on:
-      db:
+      database:
         condition: service_healthy
 
   client:

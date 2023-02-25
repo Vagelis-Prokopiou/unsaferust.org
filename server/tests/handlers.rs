@@ -5,10 +5,11 @@ use serde_json::Value;
 use sqlx::Executor;
 use sqlx::{Connection, PgConnection, PgPool};
 use std::net::TcpListener;
-use unsaferust::services::postgres::PostgresService;
 use unsaferust::models::configuration::DatabaseSettings;
 use unsaferust::models::project::{Project, ProjectStats, ProjectStatsWithMeta};
 use unsaferust::models::provider::Provider;
+use unsaferust::services::postgres::PostgresService;
+use unsaferust::services::redis::RedisService;
 use uuid::Uuid;
 
 lazy_static::lazy_static! { static ref CLIENT: reqwest::Client = reqwest::Client::new(); }
@@ -40,10 +41,10 @@ async fn spawn_app() -> (String, PgPool) {
     );
     let connection_pool = configure_database(&db_settings).await;
 
-    let dbService = PostgresService::new(Some(connection_pool.clone())).await;
-
-    let server = unsaferust::run(listener, unsaferust::redis_init().await, dbService)
-        .expect("Failed to bind address");
+    let databaseService = PostgresService::new(Some(connection_pool.clone())).await;
+    let redisService = RedisService::new().await;
+    let server =
+        unsaferust::run(listener, redisService, databaseService).expect("Failed to bind address");
     let _ = tokio::spawn(server);
     // We return the application address to the caller!
     return (format!("http://127.0.0.1:{}", port), connection_pool);

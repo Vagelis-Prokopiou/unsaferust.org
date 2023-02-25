@@ -1,7 +1,7 @@
-use crate::models::project::ProjectStatsWithMeta;
 use crate::{
     models::{
         pagination::Pagination,
+        project::ProjectStatsWithMeta,
         project::{Project, ProjectStats, ProjectWithUrl},
         provider::Provider,
     },
@@ -13,8 +13,7 @@ use axum::{
     Json,
 };
 use futures::future;
-use redis::{aio::Connection, AsyncCommands, RedisResult};
-use std::{io::BufRead, ops::DerefMut, sync::Arc};
+use std::{io::BufRead, sync::Arc};
 
 pub async fn healthCheck() -> StatusCode {
     return StatusCode::OK;
@@ -129,14 +128,20 @@ pub async fn getProjectsStats(
         Some(v) => v.as_ref(),
         None => "",
     };
-    let redis_key = format!("{page}_{limit}_{name}");
-    let mut guard = appState.redis_db.lock().await;
-    let connection = guard.deref_mut();
-    let redis_result: RedisResult<String> = connection.get(&redis_key).await;
+    let redisKey = format!("{page}_{limit}_{name}");
+    let redisResult = appState.redisService.getKey(&redisKey).await;
+
     // Return the cached value if we have one.
-    if redis_result.is_ok() {
-        return Ok(redis_result.unwrap());
+    if let Err(e) = redisResult {
+        let error = format!(
+            "getProjectsStats(): RedisService::getKey() failed with error: {:?}",
+            e
+        );
+        let _ = appState.databaseService.logError(&error).await;
+    } else {
+        return Ok(redisResult.unwrap());
     }
+
     let name_filtering = {
         if name.is_empty() {
             ""
@@ -149,7 +154,7 @@ pub async fn getProjectsStats(
         .getProjectsStats(name, name_filtering, limit, page)
         .await?;
     let json = serde_json::to_string(&result).unwrap();
-    let redisResult: RedisResult<String> = connection.set(&redis_key, &json).await;
+    let redisResult = appState.redisService.setKey(&redisKey, &json).await;
     if let Err(e) = redisResult {
         let _ = appState
             .databaseService
@@ -245,14 +250,12 @@ pub async fn projectsImport(State(appState): State<AppState>) -> Result<(), Stat
     return Ok(());
 }
 
-pub async fn redisFlush(
-    State(redis): State<Arc<tokio::sync::Mutex<Connection>>>,
-) -> Result<StatusCode, StatusCode> {
-    let mut guard = redis.lock().await;
-    let connection = guard.deref_mut();
-    let _result: String = redis::cmd("FLUSHDB")
-        .query_async(connection)
-        .await
-        .map_err(|_e| /* Todo: Add logging */ StatusCode::INTERNAL_SERVER_ERROR)?;
-    return Ok(StatusCode::OK);
+pub async fn redisFlush(State(state): State<AppState>) -> Result<(), StatusCode> {
+    let result = state.redisService.flush().await;
+    if let Err(e) = result {
+        let error = format!("redisFlush() failed with error {:?}", e);
+        let _ = state.databaseService.logError(&error).await;
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+    return Ok(());
 }

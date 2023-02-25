@@ -29,5 +29,5 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --recipe-path recipe.json
 # Build application
 COPY . .
-#CMD cargo watch --clear --quiet -x clippy -x run
 CMD cargo watch --clear --quiet --ignore logs --exec test --exec clippy --exec run
+#CMD cargo watch --clear --quiet -x clippy -x run
