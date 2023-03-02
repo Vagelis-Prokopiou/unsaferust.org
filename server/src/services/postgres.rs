@@ -3,6 +3,8 @@ use axum::http::StatusCode;
 use sqlx::Row;
 use sqlx::{postgres::PgPoolOptions, Error, PgPool};
 use std::{fs::OpenOptions, io::Write};
+use crate::utils::getDate;
+
 
 #[derive(Clone)]
 pub struct PostgresService {
@@ -72,8 +74,8 @@ impl PostgresService {
             .open(errorFile)
             .map_err(|_| "")?;
 
-        file.write_all(format!("{error}\n").as_bytes())
-            .map_err(|_| "")?;
+        let date = getDate();
+        file.write_all(format!("{date}: {error}\n").as_bytes()).map_err(|_| "")?;
         return Ok(());
     }
 
@@ -103,8 +105,8 @@ impl PostgresService {
             inner join providers on providers.id = projects.provider_id
          ",
         )
-        .fetch_all(&self.connection)
-        .await;
+            .fetch_all(&self.connection)
+            .await;
         if let Err(e) = result {
             let error = format!(
                 "DatabaseService::getProjectsWithUrl failed to retrieve data, with error: {:?}",
@@ -129,10 +131,10 @@ impl PostgresService {
         where project_id = $1
         order by created_at desc",
         )
-        .bind(id)
-        .fetch_all(&self.connection)
-        .await
-        .map_err(|e| format!("DatabaseService.getProjectsStats failed: {:?}", e))?;
+            .bind(id)
+            .fetch_all(&self.connection)
+            .await
+            .map_err(|e| format!("DatabaseService.getProjectsStats failed: {:?}", e))?;
         return Ok(projectStats);
     }
 
@@ -311,8 +313,8 @@ limit {limit} offset ({limit} * {page});"
                     $do$
         "
         ))
-        .execute(&self.connection)
-        .await;
+            .execute(&self.connection)
+            .await;
 
         if let Err(e) = result {
             let _ = self
